@@ -260,7 +260,8 @@ const isIndex = (symbol) => {
  *
  * Fallback Endpoint:
  * https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY
- */
+
+*/
 const getOptionChainData = async (symbol, expiry = null) => {
   const upperSymbol = (symbol || 'NIFTY').toUpperCase().trim();
   const trimmedExpiry = expiry ? expiry.trim() : null;
