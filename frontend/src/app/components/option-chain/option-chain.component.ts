@@ -48,6 +48,7 @@ import { Subscription, interval } from 'rxjs';
 export class OptionChainComponent implements OnInit, OnDestroy {
   private optionChainService = inject(OptionChainService);
   private snackBar = inject(MatSnackBar);
+
   private router = inject(Router);
 
   constructor() {
