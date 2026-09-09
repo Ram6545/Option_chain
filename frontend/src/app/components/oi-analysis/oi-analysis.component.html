@@ -1,0 +1,220 @@
+<div class="oi-analysis-container">
+  <!-- Header -->
+  <div class="analysis-header">
+    <h1 class="page-title">Open Interest Analysis</h1>
+    <div class="header-controls">
+      <mat-form-field appearance="outline">
+        <mat-label>Select Index</mat-label>
+        <mat-select [value]="selectedSymbol()" (selectionChange)="changeSymbol($event.value)">
+          <mat-option *ngFor="let index of indices()" [value]="index.symbol">
+            {{ index.display_name }} ({{ index.symbol }})
+          </mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <button mat-stroked-button [color]="autoRefreshEnabled() ? 'primary' : undefined"
+              (click)="toggleAutoRefresh()">
+        <mat-icon>{{ autoRefreshEnabled() ? 'pause' : 'play-arrow' }}</mat-icon>
+        Auto-Refresh: {{ autoRefreshEnabled() ? 'ON' : 'OFF' }}
+      </button>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div *ngIf="isLoading()" class="loading-state">
+    <mat-spinner diameter="80"></mat-spinner>
+    <p>Loading OI analysis...</p>
+  </div>
+
+  <!-- Error State -->
+  <div *ngIf="error()" class="error-state">
+    <mat-card class="error-card">
+      <mat-card-content>
+        <h3>Error</h3>
+        <p>{{ error() }}</p>
+        <button mat-button color="primary" (click)="loadAnalysis()">Retry</button>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  <!-- Analysis Content -->
+  <div *ngIf="!isLoading() && !error() && analysisData()" class="analysis-content">
+    <!-- Underlying Price & Timestamp -->
+    <div class="price-header">
+      <h2 class="index-name">{{ getSymbolDisplayName(selectedSymbol()) }}</h2>
+      <div class="price-info">
+        <span class="underlying-price">₹{{ formatDecimal(underlyingPrice(), 2) }}</span>
+        <span class="timestamp">Last Updated: {{ timestamp() | date:'mediumTime' }}</span>
+      </div>
+    </div>
+
+    <!-- Sentiment Card -->
+    <mat-card class="sentiment-card"
+              [class.sentiment-bullish]="sentimentColor() === 'bullish'"
+              [class.sentiment-bearish]="sentimentColor() === 'bearish'"
+              [class.sentiment-neutral]="sentimentColor() === 'neutral'">
+      <mat-card-header>
+        <mat-card-title>
+          <mat-icon class="sentiment-icon">{{ sentimentIcon() }}</mat-icon>
+          Market Sentiment: {{ sentimentText() }}
+        </mat-card-title>
+        <mat-card-subtitle>
+          Score: {{ sentiment()?.score }} | Signals: {{ sentiment()?.signals?.length }}
+        </mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="signals-list">
+          <div class="signal-item" *ngFor="let signal of sentiment()?.signals">
+            <mat-icon class="signal-icon"
+                      [class.bullish]="getSignalColor(signal.type) === 'bullish'"
+                      [class.bearish]="getSignalColor(signal.type) === 'bearish'"
+                      [class.neutral]="getSignalColor(signal.type) === 'neutral'">
+              {{ getSignalIcon(signal.type) }}
+            </mat-icon>
+            <span class="signal-reason">{{ signal.reason }}</span>
+            <span class="signal-chip"
+                  [class.bullish-chip]="getSignalColor(signal.type) === 'bullish'"
+                  [class.bearish-chip]="getSignalColor(signal.type) === 'bearish'"
+                  [class.neutral-chip]="getSignalColor(signal.type) === 'neutral'">
+              {{ signal.type | titlecase }}
+            </span>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Key Metrics Grid -->
+    <div class="metrics-grid">
+      <!-- PCR Card -->
+      <mat-card class="metric-card">
+        <mat-card-title>Put Call Ratio (PCR)</mat-card-title>
+        <mat-card-content>
+          <div class="metric-value">{{ formatDecimal(pcr()?.oi) }}</div>
+          <div class="metric-label">OI-based PCR</div>
+          <div class="metric-sub">Volume PCR: {{ formatDecimal(pcr()?.volume) }}</div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Total OI Card -->
+      <mat-card class="metric-card">
+        <mat-card-title>Total Open Interest</mat-card-title>
+        <mat-card-content>
+          <div class="metric-value">{{ formatNumber(totalOI()?.total) }}</div>
+          <div class="metric-breakdown">
+            <span class="ce-metric">Calls: {{ formatNumber(totalOI()?.calls) }}</span>
+            <span class="pe-metric">Puts: {{ formatNumber(totalOI()?.puts) }}</span>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- OI Change Card -->
+      <mat-card class="metric-card">
+        <mat-card-title>Net OI Change</mat-card-title>
+        <mat-card-content>
+          <div class="metric-value"
+               [class.positive]="(oiChange()?.net ?? 0) > 0"
+               [class.negative]="(oiChange()?.net ?? 0) < 0">
+            {{ (oiChange()?.net ?? 0) > 0 ? '+' : '' }}{{ formatNumber(oiChange()?.net) }}
+          </div>
+          <div class="metric-breakdown">
+            <span class="ce-metric">Calls: {{ (oiChange()?.calls ?? 0) > 0 ? '+' : '' }}{{ formatNumber(oiChange()?.calls) }}</span>
+            <span class="pe-metric">Puts: {{ (oiChange()?.puts ?? 0) > 0 ? '+' : '' }}{{ formatNumber(oiChange()?.puts) }}</span>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Max Pain Card -->
+      <mat-card class="metric-card">
+        <mat-card-title>Max Pain Strike</mat-card-title>
+        <mat-card-content>
+          <div class="metric-value">{{ formatNumber(maxPain()?.strike) }}</div>
+          <div class="metric-label">
+            Distance from Spot: {{ (maxPain()?.distanceFromSpot ?? 0) > 0 ? '+' : '' }}{{ formatDecimal(maxPain()?.distanceFromSpot, 2) }}
+          </div>
+        </mat-card-content>
+      </mat-card>
+    </div>
+
+    <!-- Max OI Strikes & Support/Resistance -->
+    <div class="analysis-grid">
+      <!-- Max OI Strikes -->
+      <mat-card class="analysis-card">
+        <mat-card-title>Highest OI Strikes</mat-card-title>
+        <mat-card-content>
+          <div class="oi-strike-item">
+            <span class="label ce-label">Call OI Peak</span>
+            <span class="strike-value">{{ formatNumber(maxOISTrikes()?.call?.strike) }}</span>
+            <span class="oi-value">{{ formatNumber(maxOISTrikes()?.call?.oi) }}</span>
+          </div>
+          <div class="oi-strike-item">
+            <span class="label pe-label">Put OI Peak</span>
+            <span class="strike-value">{{ formatNumber(maxOISTrikes()?.put?.strike) }}</span>
+            <span class="oi-value">{{ formatNumber(maxOISTrikes()?.put?.oi) }}</span>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Support Levels -->
+      <mat-card class="analysis-card">
+        <mat-card-title>Support Levels</mat-card-title>
+        <mat-card-content>
+          <div class="level-item" *ngFor="let level of supportResistance()?.support">
+            <span class="level-strike">{{ formatNumber(level.strike) }}</span>
+            <span class="level-oi">{{ formatNumber(level.oi) }}</span>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Resistance Levels -->
+      <mat-card class="analysis-card">
+        <mat-card-title>Resistance Levels</mat-card-title>
+        <mat-card-content>
+          <div class="level-item" *ngFor="let level of supportResistance()?.resistance">
+            <span class="level-strike">{{ formatNumber(level.strike) }}</span>
+            <span class="level-oi">{{ formatNumber(level.oi) }}</span>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- ATM OI Analysis -->
+      <mat-card class="analysis-card">
+        <mat-card-title>ATM OI Concentration</mat-card-title>
+        <mat-card-content>
+          <div class="level-item">
+            <span class="label">ATM Strike</span>
+            <span class="level-strike">{{ formatNumber(atmOIAnalysis()?.atmStrike) }}</span>
+          </div>
+          <div class="level-item">
+            <span class="label ce-label">CE OI</span>
+            <span class="level-oi">{{ formatNumber(atmOIAnalysis()?.ceOI) }}</span>
+          </div>
+          <div class="level-item">
+            <span class="label pe-label">PE OI</span>
+            <span class="level-oi">{{ formatNumber(atmOIAnalysis()?.peOI) }}</span>
+          </div>
+          <div class="level-item">
+            <span class="label">ATM PCR</span>
+            <span class="level-strike">{{ atmOIAnalysis()?.pcr }}</span>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    </div>
+
+    <!-- Total Volume -->
+    <mat-card class="volume-card">
+      <mat-card-title>Trading Volume</mat-card-title>
+      <mat-card-content>
+        <div class="volume-breakdown">
+          <div class="volume-item ce-volume">
+            <span class="label">Calls Volume</span>
+            <span class="volume-value">{{ formatNumber(totalVolume()?.calls) }}</span>
+          </div>
+          <div class="volume-item pe-volume">
+            <span class="label">Puts Volume</span>
+            <span class="volume-value">{{ formatNumber(totalVolume()?.puts) }}</span>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+</div>

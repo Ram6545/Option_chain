@@ -1,0 +1,84 @@
+:host {
+  display: block;
+  min-height: 100vh;
+  width: 100%;
+}
+
+.app-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  height: 52px;
+  background: #ffffff;
+  color: #0f172a;
+  border-bottom: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  padding: 0 16px;
+}
+
+.logo-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #0b5cab;
+}
+
+.app-title {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: #0f172a;
+  letter-spacing: -0.2px;
+}
+
+.logo-icon {
+  font-size: 1.3rem;
+  width: 22px;
+  height: 22px;
+  color: #0b5cab;
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+  border-radius: 6px;
+  padding: 0 12px;
+  height: 34px;
+  transition: all 0.15s ease;
+
+  .nav-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+
+  &:hover {
+    background: #f1f5f9;
+    color: #0b5cab;
+  }
+
+  &.active-link {
+    background: #e8f4fd;
+    color: #0b5cab;
+    font-weight: 600;
+  }
+}
+
+.main-content {
+  background: #ffffff;
+  min-height: calc(100vh - 52px);
+  display: block;
+}

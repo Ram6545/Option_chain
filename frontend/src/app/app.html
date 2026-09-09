@@ -1,0 +1,27 @@
+<mat-toolbar class="app-toolbar">
+  <div class="logo-group">
+    <mat-icon class="logo-icon">show_chart</mat-icon>
+    <span class="app-title">NIFTY / Bank NIFTY Option Chain</span>
+  </div>
+
+  <span class="spacer"></span>
+
+  <nav class="nav-links">
+    <a mat-button routerLink="/option-chain" routerLinkActive="active-link" class="nav-item">
+      <mat-icon class="nav-icon">table_chart</mat-icon>
+      <span>Option Chain</span>
+    </a>
+    <a mat-button routerLink="/oi-analysis" routerLinkActive="active-link" class="nav-item">
+      <mat-icon class="nav-icon">analytics</mat-icon>
+      <span>OI Analysis</span>
+    </a>
+    <a mat-button routerLink="/strike-pcr" routerLinkActive="active-link" class="nav-item">
+      <mat-icon class="nav-icon">donut_large</mat-icon>
+      <span>Strike PCR</span>
+    </a>
+  </nav>
+</mat-toolbar>
+
+<main class="main-content">
+  <router-outlet />
+</main>

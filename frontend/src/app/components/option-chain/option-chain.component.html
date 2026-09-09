@@ -1,0 +1,670 @@
+<div class="option-chain-page">
+  <!-- Sticky Top Header Block -->
+  <div class="sticky-header-container">
+    <!-- Top Control Bar -->
+    <div class="top-nav-bar">
+      <div class="left-controls">
+        <!-- Spot Price Selector -->
+        <div class="control-group">
+          <label class="control-label">Spot Price</label>
+          <div class="spot-selector-box" [matMenuTriggerFor]="indexMenu">
+            <mat-icon class="search-icon">search</mat-icon>
+            <span class="index-symbol">{{ symbol() }}</span>
+            <span class="spot-price-val">{{ formatDecimal(underlyingPrice(), 2) }}</span>
+            <span class="spot-change" [class.positive]="spotDayChange() >= 0" [class.negative]="spotDayChange() < 0">
+              {{ formatDecimal(spotDayChange(), 2) }} ({{ spotDayChangePercent() }}%)
+            </span>
+            <mat-icon class="dropdown-arrow">arrow_drop_down</mat-icon>
+          </div>
+          <mat-menu #indexMenu="matMenu" class="custom-dropdown-menu" yPosition="below" [overlapTrigger]="false">
+            <button mat-menu-item *ngFor="let idx of indices()" (click)="changeSymbol(idx.symbol)">
+              <span class="menu-item-name">{{ idx.display_name }} ({{ idx.symbol }})</span>
+            </button>
+          </mat-menu>
+        </div>
+
+        <!-- Expiry Date Selector -->
+        <div class="control-group">
+          <label class="control-label">Expiry Date</label>
+          <div class="expiry-selector-box" [matMenuTriggerFor]="expiryMenu">
+            <span class="selected-expiry-text">{{ selectedExpiry() || nearestExpiry() || 'Select Expiry' }}</span>
+            <mat-icon class="dropdown-arrow">keyboard_arrow_down</mat-icon>
+          </div>
+          <mat-menu #expiryMenu="matMenu" class="custom-dropdown-menu" yPosition="below" [overlapTrigger]="false">
+            <button mat-menu-item *ngFor="let exp of expiries()" (click)="changeExpiry(exp)">
+              <span>{{ exp }}</span>
+              <span *ngIf="exp === nearestExpiry()" class="nearest-chip">NEAREST</span>
+            </button>
+          </mat-menu>
+        </div>
+
+        <!-- Strike Range / View Selector -->
+        <div class="control-group">
+          <label class="control-label">Strikes</label>
+          <div class="strike-selector-box" [matMenuTriggerFor]="strikeMenu">
+            <span class="selected-strike-text">{{ getStrikeLimitLabel() }}</span>
+            <mat-icon class="dropdown-arrow">keyboard_arrow_down</mat-icon>
+          </div>
+          <mat-menu #strikeMenu="matMenu" class="custom-dropdown-menu" yPosition="below" [overlapTrigger]="false">
+            <button mat-menu-item (click)="changeStrikeLimit(0)" [class.active-menu-item]="strikeLimit() === 0">
+              <span class="menu-item-text">All Strikes (Full Chain)</span>
+            </button>
+            <button mat-menu-item (click)="changeStrikeLimit(5)" [class.active-menu-item]="strikeLimit() === 5">
+              <span class="menu-item-text">±5 Strikes (Around ATM)</span>
+            </button>
+            <button mat-menu-item (click)="changeStrikeLimit(10)" [class.active-menu-item]="strikeLimit() === 10">
+              <span class="menu-item-text">±10 Strikes (Around ATM)</span>
+            </button>
+            <button mat-menu-item (click)="changeStrikeLimit(15)" [class.active-menu-item]="strikeLimit() === 15">
+              <span class="menu-item-text">±15 Strikes (Around ATM)</span>
+            </button>
+            <button mat-menu-item (click)="changeStrikeLimit(20)" [class.active-menu-item]="strikeLimit() === 20">
+              <span class="menu-item-text">±20 Strikes (Around ATM)</span>
+            </button>
+            <button mat-menu-item (click)="changeStrikeLimit(30)" [class.active-menu-item]="strikeLimit() === 30">
+              <span class="menu-item-text">±30 Strikes (Around ATM)</span>
+            </button>
+            <button mat-menu-item (click)="changeStrikeLimit(50)" [class.active-menu-item]="strikeLimit() === 50">
+              <span class="menu-item-text">±50 Strikes (Around ATM)</span>
+            </button>
+          </mat-menu>
+        </div>
+      </div>
+
+      <!-- Right Quick Actions -->
+      <div class="right-actions">
+        <!-- PCR Columns Toggle Button -->
+        <button class="action-btn toggle-badge-btn" [class.active-btn]="showPCR()" (click)="togglePCR()" matTooltip="Toggle Put-Call Ratio (PCR OI & PCR Chg OI) Columns">
+          <mat-icon class="action-icon">donut_large</mat-icon>
+          <span class="action-text">PCR <span class="mini-status" [class.status-on]="showPCR()">{{ showPCR() ? 'ON' : 'OFF' }}</span></span>
+        </button>
+
+        <!-- Quick 5-Strike Window Filter Button -->
+        <button class="action-btn toggle-badge-btn" [class.active-btn]="strikeLimit() === 5" (click)="changeStrikeLimit(strikeLimit() === 5 ? 0 : 5)" matTooltip="Quick Toggle ±5 Strikes (11-Strike ATM Window)">
+          <mat-icon class="action-icon">filter_center_focus</mat-icon>
+          <span class="action-text">±5 Strikes <span class="mini-status" [class.status-on]="strikeLimit() === 5">{{ strikeLimit() === 5 ? 'ACTIVE' : 'ALL' }}</span></span>
+        </button>
+
+        <!-- Dedicated PCR Matrix Page Button -->
+        <button class="action-btn link-action-btn" (click)="openStrikePcr()" matTooltip="Open Dedicated 5-Strike PCR Matrix">
+          <mat-icon class="action-icon">analytics</mat-icon>
+          <span class="action-text">PCR Matrix</span>
+        </button>
+
+        <!-- Option Greeks Toggle Button -->
+        <button class="action-btn toggle-badge-btn" [class.active-btn]="showGreeks()" (click)="toggleGreeks()" matTooltip="Toggle Option Greeks (Delta, Theta, Gamma, Vega)">
+          <mat-icon class="action-icon">functions</mat-icon>
+          <span class="action-text">Greeks <span class="mini-status" [class.status-on]="showGreeks()">{{ showGreeks() ? 'ON' : 'OFF' }}</span></span>
+        </button>
+
+        <!-- Bid/Ask Columns Toggle Button -->
+        <button class="action-btn toggle-badge-btn" [class.active-btn]="showBidAsk()" (click)="toggleBidAsk()" matTooltip="Toggle Bid & Ask Quote Columns">
+          <mat-icon class="action-icon">view_column</mat-icon>
+          <span class="action-text">Bid/Ask <span class="mini-status" [class.status-on]="showBidAsk()">{{ showBidAsk() ? 'ON' : 'OFF' }}</span></span>
+        </button>
+
+        <button class="action-btn" (click)="openOIChart()" matTooltip="View OI Analysis Charts">
+          <mat-icon class="action-icon">show_chart</mat-icon>
+          <span class="action-text">OI Chart</span>
+        </button>
+
+        <button class="action-btn" (click)="downloadCSV()" matTooltip="Download Option Chain CSV">
+          <mat-icon class="action-icon">file_download</mat-icon>
+          <span class="action-text">Download</span>
+        </button>
+
+        <button class="action-btn" [matMenuTriggerFor]="filterMenu" matTooltip="Filter Strike Range">
+          <mat-icon class="action-icon">filter_alt</mat-icon>
+          <span class="action-text">Filter</span>
+        </button>
+        <mat-menu #filterMenu="matMenu" class="custom-dropdown-menu" yPosition="below" [overlapTrigger]="false">
+          <button mat-menu-item (click)="changeStrikeLimit(0)" [class.active-menu-item]="strikeLimit() === 0">
+            <span>All Strikes (Full Chain)</span>
+          </button>
+          <button mat-menu-item (click)="changeStrikeLimit(5)" [class.active-menu-item]="strikeLimit() === 5">
+            <span>±5 Strikes (5 Up & 5 Down around ATM)</span>
+          </button>
+          <button mat-menu-item (click)="changeStrikeLimit(10)" [class.active-menu-item]="strikeLimit() === 10">
+            <span>±10 Strikes (Around ATM)</span>
+          </button>
+          <button mat-menu-item (click)="changeStrikeLimit(15)" [class.active-menu-item]="strikeLimit() === 15">
+            <span>±15 Strikes (Around ATM)</span>
+          </button>
+          <button mat-menu-item (click)="changeStrikeLimit(20)" [class.active-menu-item]="strikeLimit() === 20">
+            <span>±20 Strikes (Around ATM)</span>
+          </button>
+          <button mat-menu-item (click)="changeStrikeLimit(30)" [class.active-menu-item]="strikeLimit() === 30">
+            <span>±30 Strikes (Around ATM)</span>
+          </button>
+          <button mat-menu-item (click)="changeStrikeLimit(50)" [class.active-menu-item]="strikeLimit() === 50">
+            <span>±50 Strikes (Around ATM)</span>
+          </button>
+        </mat-menu>
+
+        <button class="action-btn" [matMenuTriggerFor]="settingsMenu" matTooltip="Customize Option Chain">
+          <mat-icon class="action-icon">settings</mat-icon>
+          <span class="action-text">Settings</span>
+        </button>
+        <mat-menu #settingsMenu="matMenu" class="custom-dropdown-menu" yPosition="below" [overlapTrigger]="false">
+          <button mat-menu-item (click)="toggleGreeks()">
+            <mat-icon>{{ showGreeks() ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
+            <span>Show Option Greeks (Delta, Theta, Gamma, Vega)</span>
+          </button>
+          <button mat-menu-item (click)="toggleBidAsk()">
+            <mat-icon>{{ showBidAsk() ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
+            <span>Show Bid & Ask Quote Columns</span>
+          </button>
+          <button mat-menu-item (click)="toggleAutoRefresh()">
+            <mat-icon>{{ autoRefreshEnabled() ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
+            <span>Auto Refresh (30s)</span>
+          </button>
+        </mat-menu>
+
+        <button class="action-btn atm-nav-btn" (click)="scrollToATMStrike()" matTooltip="Scroll to Current ATM Strike ({{ atmStrike() }})">
+          <mat-icon class="action-icon">my_location</mat-icon>
+          <span class="action-text">ATM ({{ atmStrike() }})</span>
+        </button>
+
+        <button class="action-btn" (click)="openFutureChart()" matTooltip="View Future Chart">
+          <mat-icon class="action-icon">insert_chart_outlined</mat-icon>
+          <span class="action-text">Future Chart</span>
+        </button>
+
+        <!-- Auto Refresh Switch -->
+        <div class="auto-refresh-toggle" (click)="toggleAutoRefresh()" matTooltip="Toggle Auto Refresh">
+          <div class="custom-switch" [class.active]="autoRefreshEnabled()">
+            <div class="switch-handle"></div>
+          </div>
+          <span class="toggle-label">Auto Refresh</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Summary Ticker Bar -->
+    <div class="metrics-ticker-bar">
+      <div class="ticker-item">
+        <span class="ticker-label blue-label">PCR:</span>
+        <span class="ticker-val">{{ formatDecimal(pcr(), 4) }}</span>
+      </div>
+
+      <div class="ticker-item">
+        <span class="ticker-label">CHG OI PCR:</span>
+        <span class="ticker-val" [class.negative]="chgOiPcr() < 0">{{ formatDecimal(chgOiPcr(), 4) }}</span>
+      </div>
+
+      <div class="ticker-item">
+        <span class="ticker-box-label">Lot Size: <strong class="box-val">{{ lotSize() }}</strong></span>
+      </div>
+
+      <div class="ticker-item">
+        <span class="ticker-label link-label" (click)="openOIChart()">India Vix</span>
+        <span class="ticker-val vix-val">{{ formatDecimal(indiaVix(), 2) }} ({{ formatDecimal(indiaVixChange(), 2) }})</span>
+      </div>
+
+      <div class="ticker-item">
+        <span class="ticker-label link-label" (click)="openOIChart()">Max Pain:</span>
+        <span class="ticker-val bold-val">{{ formatNumber(maxPainStrike()) }}</span>
+      </div>
+
+      <div class="ticker-item range-item">
+        <mat-icon class="info-icon">info_outline</mat-icon>
+        <span class="ticker-label">Expected Range:</span>
+        <span class="ticker-val">{{ expectedRange() }}</span>
+      </div>
+
+      <!-- 2 Colors Legend Indicators -->
+      <div class="ticker-item legend-group">
+        <span class="legend-indicator max-1st-legend" matTooltip="Highest value in the column">1st Highest</span>
+        <span class="legend-indicator max-2nd-legend" matTooltip="2nd Highest value in the column">2nd Highest</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Initial Loading State -->
+  <div *ngIf="isLoading() && !optionChainData()" class="loading-state-container">
+    <mat-spinner diameter="48"></mat-spinner>
+    <span class="loading-text">Loading live option chain...</span>
+  </div>
+
+  <!-- Error State -->
+  <div *ngIf="error() && !optionChainData()" class="error-container">
+    <div class="error-banner">
+      <mat-icon>error_outline</mat-icon>
+      <span>{{ error() }}</span>
+      <button mat-button color="primary" (click)="loadOptionChain()">Retry</button>
+    </div>
+  </div>
+
+  <!-- Option Chain Table -->
+  <div *ngIf="!isLoading() && optionChainData()" class="table-scroll-wrapper">
+    <table class="light-option-table">
+      <thead>
+        <!-- Top Group Header (CALLS vs PUTS vs PCR) -->
+        <tr class="header-group-row">
+          <th [attr.colspan]="callsColspan()" class="group-call-header">
+            <span class="group-title calls-title">CALLS</span>
+          </th>
+          <th class="group-strike-header"></th>
+          <th [attr.colspan]="putsColspan()" class="group-put-header">
+            <span class="group-title puts-title">PUTS</span>
+          </th>
+          <th *ngIf="showPCR()" colspan="2" class="group-pcr-header">
+            <span class="group-title pcr-title">PCR</span>
+          </th>
+        </tr>
+        <tr class="header-row">
+          <!-- Calls Headers -->
+          <th class="th-call" (click)="sortBy('oi')">OI</th>
+          <th class="th-call" (click)="sortBy('changeOI')">CHNG IN OI</th>
+          <th class="th-call" (click)="sortBy('volume')">VOLUME</th>
+          <th class="th-call">IV</th>
+
+          <!-- Calls Greeks (Optional) -->
+          <ng-container *ngIf="showGreeks()">
+            <th class="th-call th-greek" matTooltip="Call Delta">DELTA</th>
+            <th class="th-call th-greek" matTooltip="Call Theta (per day)">THETA</th>
+            <th class="th-call th-greek" matTooltip="Gamma">GAMMA</th>
+            <th class="th-call th-greek" matTooltip="Vega (per 1% IV)">VEGA</th>
+          </ng-container>
+
+          <th class="th-call">LTP</th>
+          <th class="th-call">CHNG</th>
+
+          <!-- Calls Bid/Ask (Optional) -->
+          <ng-container *ngIf="showBidAsk()">
+            <th class="th-call">BID QTY</th>
+            <th class="th-call">BID</th>
+            <th class="th-call">ASK</th>
+            <th class="th-call">ASK QTY</th>
+          </ng-container>
+
+          <!-- Strike Header (Center) -->
+          <th class="th-strike" (click)="sortBy('strikePrice')">
+            STRIKE <span class="sort-arrow">↑</span>
+          </th>
+
+          <!-- Puts Bid/Ask (Optional) -->
+          <ng-container *ngIf="showBidAsk()">
+            <th class="th-put">BID QTY</th>
+            <th class="th-put">BID</th>
+            <th class="th-put">ASK</th>
+            <th class="th-put">ASK QTY</th>
+          </ng-container>
+
+          <!-- Puts Headers -->
+          <th class="th-put">CHNG</th>
+          <th class="th-put">LTP</th>
+
+          <!-- Puts Greeks (Optional) -->
+          <ng-container *ngIf="showGreeks()">
+            <th class="th-put th-greek" matTooltip="Put Delta">DELTA</th>
+            <th class="th-put th-greek" matTooltip="Put Theta (per day)">THETA</th>
+            <th class="th-put th-greek" matTooltip="Gamma">GAMMA</th>
+            <th class="th-put th-greek" matTooltip="Vega (per 1% IV)">VEGA</th>
+          </ng-container>
+
+          <th class="th-put">IV</th>
+          <th class="th-put" (click)="sortBy('volume')">VOLUME</th>
+          <th class="th-put" (click)="sortBy('changeOI')">CHNG IN OI</th>
+          <th class="th-put" (click)="sortBy('oi')">OI</th>
+
+          <!-- PCR Headers (Optional) -->
+          <ng-container *ngIf="showPCR()">
+            <th class="th-pcr" matTooltip="Put OI ÷ Call OI">PCR (OI)</th>
+            <th class="th-pcr" matTooltip="Put Chg OI ÷ Call Chg OI">PCR (CHNG OI)</th>
+          </ng-container>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let strike of filteredStrikes()"
+            class="data-row"
+            [class.atm-highlight]="isATMStrike(strike.strikePrice)"
+            [attr.id]="isATMStrike(strike.strikePrice) ? 'atm-strike-row' : null">
+
+          <!-- CALLS SIDE -->
+          <!-- 1. OI -->
+          <td class="cell-call align-center"
+              [class.itm-bg]="isITMCall(strike.strikePrice)"
+              [class.max-oi-cell]="isMaxCallOI(strike.ce?.oi)"
+              [class.max-oi-cell-2nd]="isSecondMaxCallOI(strike.ce?.oi)">
+            <span class="cell-val" *ngIf="strike.ce">{{ formatNumber(strike.ce?.oi) }}</span>
+            <span *ngIf="!strike.ce">-</span>
+          </td>
+
+          <!-- 2. CHNG IN OI -->
+          <td class="cell-call align-center"
+              [class.itm-bg]="isITMCall(strike.strikePrice)"
+              [class.max-chg-cell]="isMaxCallChangeOI(strike.ce?.changeOI)"
+              [class.max-chg-cell-2nd]="isSecondMaxCallChangeOI(strike.ce?.changeOI)">
+            <span class="cell-val" *ngIf="strike.ce" [class.neg-num]="(strike.ce?.changeOI || 0) < 0" [class.pos-num]="(strike.ce?.changeOI || 0) > 0">
+              <span *ngIf="(strike.ce?.changeOI || 0) > 0">+</span>{{ formatNumber(strike.ce?.changeOI) }}
+            </span>
+            <span *ngIf="!strike.ce">-</span>
+          </td>
+
+          <!-- 3. VOLUME -->
+          <td class="cell-call align-center"
+              [class.itm-bg]="isITMCall(strike.strikePrice)"
+              [class.max-vol-cell]="isMaxCallVolume(strike.ce?.volume)"
+              [class.max-vol-cell-2nd]="isSecondMaxCallVolume(strike.ce?.volume)">
+            <span class="cell-val" *ngIf="strike.ce">{{ formatNumber(strike.ce?.volume) }}</span>
+            <span *ngIf="!strike.ce">-</span>
+          </td>
+
+          <!-- 4. IV -->
+          <td class="cell-call align-center" [class.itm-bg]="isITMCall(strike.strikePrice)">
+            <span class="cell-val" *ngIf="strike.ce">{{ formatDecimal(strike.ce?.iv, 2) }}</span>
+            <span *ngIf="!strike.ce">-</span>
+          </td>
+
+          <!-- 5-8. CALLS GREEKS (Optional) -->
+          <ng-container *ngIf="showGreeks()">
+            <td class="cell-call align-center cell-greek" [class.itm-bg]="isITMCall(strike.strikePrice)">
+              <span class="greek-val delta-val pos-greek" *ngIf="strike.ce">{{ getGreekDelta(strike.strikePrice, strike.ce, 'CE', strike.pe) }}</span>
+              <span *ngIf="!strike.ce">-</span>
+            </td>
+            <td class="cell-call align-center cell-greek" [class.itm-bg]="isITMCall(strike.strikePrice)">
+              <span class="greek-val theta-val neg-greek" *ngIf="strike.ce">{{ getGreekTheta(strike.strikePrice, strike.ce, 'CE', strike.pe) }}</span>
+              <span *ngIf="!strike.ce">-</span>
+            </td>
+            <td class="cell-call align-center cell-greek" [class.itm-bg]="isITMCall(strike.strikePrice)">
+              <span class="greek-val gamma-val" *ngIf="strike.ce">{{ getGreekGamma(strike.strikePrice, strike.ce, 'CE', strike.pe) }}</span>
+              <span *ngIf="!strike.ce">-</span>
+            </td>
+            <td class="cell-call align-center cell-greek" [class.itm-bg]="isITMCall(strike.strikePrice)">
+              <span class="greek-val vega-val" *ngIf="strike.ce">{{ getGreekVega(strike.strikePrice, strike.ce, 'CE', strike.pe) }}</span>
+              <span *ngIf="!strike.ce">-</span>
+            </td>
+          </ng-container>
+
+          <!-- 9. LTP -->
+          <td class="cell-call align-center" [class.itm-bg]="isITMCall(strike.strikePrice)">
+            <span class="blue-link ltp-num" *ngIf="strike.ce">{{ formatDecimal(strike.ce?.ltp, 2) }}</span>
+            <span *ngIf="!strike.ce">-</span>
+          </td>
+
+          <!-- 10. CHNG -->
+          <td class="cell-call align-center" [class.itm-bg]="isITMCall(strike.strikePrice)">
+            <span class="cell-val" *ngIf="strike.ce" [class.neg-num]="(strike.ce?.change || 0) < 0" [class.pos-num]="(strike.ce?.change || 0) > 0">
+              {{ formatDecimal(strike.ce?.change, 2) }}
+            </span>
+            <span *ngIf="!strike.ce">-</span>
+          </td>
+
+          <!-- 11-14. CALLS BID / ASK (Optional) -->
+          <ng-container *ngIf="showBidAsk()">
+            <td class="cell-call align-center" [class.itm-bg]="isITMCall(strike.strikePrice)">
+              <span class="cell-val" *ngIf="strike.ce">{{ formatNumber(strike.ce?.bidQty) }}</span>
+              <span *ngIf="!strike.ce">-</span>
+            </td>
+            <td class="cell-call align-center" [class.itm-bg]="isITMCall(strike.strikePrice)">
+              <span class="cell-val" *ngIf="strike.ce">{{ formatDecimal(strike.ce?.bidPrice, 2) }}</span>
+              <span *ngIf="!strike.ce">-</span>
+            </td>
+            <td class="cell-call align-center" [class.itm-bg]="isITMCall(strike.strikePrice)">
+              <span class="cell-val" *ngIf="strike.ce">{{ formatDecimal(strike.ce?.askPrice, 2) }}</span>
+              <span *ngIf="!strike.ce">-</span>
+            </td>
+            <td class="cell-call align-center" [class.itm-bg]="isITMCall(strike.strikePrice)">
+              <span class="cell-val" *ngIf="strike.ce">{{ formatNumber(strike.ce?.askQty) }}</span>
+              <span *ngIf="!strike.ce">-</span>
+            </td>
+          </ng-container>
+
+          <!-- STRIKE PRICE (CENTER WITH POSITION INDICATORS & S/R BREAKOUT BADGES) -->
+          <td class="cell-strike align-center">
+            <div class="strike-cell-inner">
+              <span class="blue-link strike-link">{{ formatDecimal(strike.strikePrice, 2) }}</span>
+              <div class="strike-subtag" *ngIf="isATMStrike(strike.strikePrice)">
+                <span class="badge-tag atm-tag">ATM</span>
+              </div>
+              <!-- Dynamic S1/R1 Holding vs Breaking Badge -->
+              <div class="strike-subtag sr-subtag" *ngIf="getStrikeSRBadge(strike.strikePrice) as srBadge">
+                <span class="badge-tag" [ngClass]="srBadge.badgeClass" [matTooltip]="srBadge.tooltip">{{ srBadge.text }}</span>
+              </div>
+              <div class="strike-subtag pos-subtag" *ngIf="!isATMStrike(strike.strikePrice) && !getStrikeSRBadge(strike.strikePrice)">
+                <span class="position-text">{{ getStrikePosition(strike.strikePrice) === 'BELOW' ? '▼ Below' : '▲ Above' }}</span>
+              </div>
+            </div>
+          </td>
+
+          <!-- PUTS SIDE -->
+          <!-- PUTS BID / ASK (Optional) -->
+          <ng-container *ngIf="showBidAsk()">
+            <td class="cell-put align-center" [class.itm-bg]="isITMPut(strike.strikePrice)">
+              <span class="cell-val" *ngIf="strike.pe">{{ formatNumber(strike.pe?.bidQty) }}</span>
+              <span *ngIf="!strike.pe">-</span>
+            </td>
+            <td class="cell-put align-center" [class.itm-bg]="isITMPut(strike.strikePrice)">
+              <span class="cell-val" *ngIf="strike.pe">{{ formatDecimal(strike.pe?.bidPrice, 2) }}</span>
+              <span *ngIf="!strike.pe">-</span>
+            </td>
+            <td class="cell-put align-center" [class.itm-bg]="isITMPut(strike.strikePrice)">
+              <span class="cell-val" *ngIf="strike.pe">{{ formatDecimal(strike.pe?.askPrice, 2) }}</span>
+              <span *ngIf="!strike.pe">-</span>
+            </td>
+            <td class="cell-put align-center" [class.itm-bg]="isITMPut(strike.strikePrice)">
+              <span class="cell-val" *ngIf="strike.pe">{{ formatNumber(strike.pe?.askQty) }}</span>
+              <span *ngIf="!strike.pe">-</span>
+            </td>
+          </ng-container>
+
+          <!-- CHNG -->
+          <td class="cell-put align-center" [class.itm-bg]="isITMPut(strike.strikePrice)">
+            <span class="cell-val" *ngIf="strike.pe" [class.neg-num]="(strike.pe?.change || 0) < 0" [class.pos-num]="(strike.pe?.change || 0) > 0">
+              {{ formatDecimal(strike.pe?.change, 2) }}
+            </span>
+            <span *ngIf="!strike.pe">-</span>
+          </td>
+
+          <!-- LTP -->
+          <td class="cell-put align-center" [class.itm-bg]="isITMPut(strike.strikePrice)">
+            <span class="blue-link ltp-num" *ngIf="strike.pe">{{ formatDecimal(strike.pe?.ltp, 2) }}</span>
+            <span *ngIf="!strike.pe">-</span>
+          </td>
+
+          <!-- PUTS GREEKS (Optional) -->
+          <ng-container *ngIf="showGreeks()">
+            <td class="cell-put align-center cell-greek" [class.itm-bg]="isITMPut(strike.strikePrice)">
+              <span class="greek-val delta-val neg-greek" *ngIf="strike.pe">{{ getGreekDelta(strike.strikePrice, strike.pe, 'PE', strike.ce) }}</span>
+              <span *ngIf="!strike.pe">-</span>
+            </td>
+            <td class="cell-put align-center cell-greek" [class.itm-bg]="isITMPut(strike.strikePrice)">
+              <span class="greek-val theta-val neg-greek" *ngIf="strike.pe">{{ getGreekTheta(strike.strikePrice, strike.pe, 'PE', strike.ce) }}</span>
+              <span *ngIf="!strike.pe">-</span>
+            </td>
+            <td class="cell-put align-center cell-greek" [class.itm-bg]="isITMPut(strike.strikePrice)">
+              <span class="greek-val gamma-val" *ngIf="strike.pe">{{ getGreekGamma(strike.strikePrice, strike.pe, 'PE', strike.ce) }}</span>
+              <span *ngIf="!strike.pe">-</span>
+            </td>
+            <td class="cell-put align-center cell-greek" [class.itm-bg]="isITMPut(strike.strikePrice)">
+              <span class="greek-val vega-val" *ngIf="strike.pe">{{ getGreekVega(strike.strikePrice, strike.pe, 'PE', strike.ce) }}</span>
+              <span *ngIf="!strike.pe">-</span>
+            </td>
+          </ng-container>
+
+          <!-- IV -->
+          <td class="cell-put align-center" [class.itm-bg]="isITMPut(strike.strikePrice)">
+            <span class="cell-val" *ngIf="strike.pe">{{ formatDecimal(strike.pe?.iv, 2) }}</span>
+            <span *ngIf="!strike.pe">-</span>
+          </td>
+
+          <!-- VOLUME -->
+          <td class="cell-put align-center"
+              [class.itm-bg]="isITMPut(strike.strikePrice)"
+              [class.max-vol-cell]="isMaxPutVolume(strike.pe?.volume)"
+              [class.max-vol-cell-2nd]="isSecondMaxPutVolume(strike.pe?.volume)">
+            <span class="cell-val" *ngIf="strike.pe">{{ formatNumber(strike.pe?.volume) }}</span>
+            <span *ngIf="!strike.pe">-</span>
+          </td>
+
+          <!-- CHNG IN OI -->
+          <td class="cell-put align-center"
+              [class.itm-bg]="isITMPut(strike.strikePrice)"
+              [class.max-chg-cell]="isMaxPutChangeOI(strike.pe?.changeOI)"
+              [class.max-chg-cell-2nd]="isSecondMaxPutChangeOI(strike.pe?.changeOI)">
+            <span class="cell-val" *ngIf="strike.pe" [class.neg-num]="(strike.pe?.changeOI || 0) < 0" [class.pos-num]="(strike.pe?.changeOI || 0) > 0">
+              <span *ngIf="(strike.pe?.changeOI || 0) > 0">+</span>{{ formatNumber(strike.pe?.changeOI) }}
+            </span>
+            <span *ngIf="!strike.pe">-</span>
+          </td>
+
+          <!-- OI -->
+          <td class="cell-put align-center"
+              [class.itm-bg]="isITMPut(strike.strikePrice)"
+              [class.max-oi-cell]="isMaxPutOI(strike.pe?.oi)"
+              [class.max-oi-cell-2nd]="isSecondMaxPutOI(strike.pe?.oi)">
+            <span class="cell-val" *ngIf="strike.pe">{{ formatNumber(strike.pe?.oi) }}</span>
+            <span *ngIf="!strike.pe">-</span>
+          </td>
+
+          <!-- PCR (OI) & PCR (CHNG IN OI) -->
+          <ng-container *ngIf="showPCR()">
+            <td class="cell-pcr align-center">
+              <span class="pcr-pill"
+                    [class.pcr-bullish]="getStrikePCRValue(strike.ce?.oi, strike.pe?.oi) >= 1"
+                    [class.pcr-bearish]="getStrikePCRValue(strike.ce?.oi, strike.pe?.oi) < 1 && getStrikePCRValue(strike.ce?.oi, strike.pe?.oi) > 0">
+                {{ getStrikePCR(strike.ce?.oi, strike.pe?.oi) }}
+              </span>
+            </td>
+            <td class="cell-pcr align-center">
+              <span class="pcr-chg-val"
+                    [class.pos-num]="(getStrikeChangeOiPCRValue(strike.ce?.changeOI, strike.pe?.changeOI) || 0) > 0"
+                    [class.neg-num]="(getStrikeChangeOiPCRValue(strike.ce?.changeOI, strike.pe?.changeOI) || 0) < 0">
+                {{ getStrikeChangeOiPCR(strike.ce?.changeOI, strike.pe?.changeOI) }}
+              </span>
+            </td>
+          </ng-container>
+
+        </tr>
+      </tbody>
+      <tfoot class="table-total-footer">
+        <tr class="total-row">
+          <!-- CALLS TOTALS -->
+          <!-- 1. Total Call OI -->
+          <td class="cell-call align-center total-cell">
+            <div class="agg-cell-content">
+              <span class="agg-mini-label">Total CE OI:</span>
+              <span class="total-val bold-val">{{ formatNumber(totalCEOI()) }}</span>
+            </div>
+          </td>
+          <!-- 2. Total Call Chg OI -->
+          <td class="cell-call align-center total-cell">
+            <div class="agg-cell-content">
+              <span class="agg-mini-label">Total CE Chg:</span>
+              <span class="total-val bold-val" [class.neg-num]="totalChangeCEOI() < 0" [class.pos-num]="totalChangeCEOI() > 0">
+                <span *ngIf="totalChangeCEOI() > 0">+</span>{{ formatNumber(totalChangeCEOI()) }}
+              </span>
+            </div>
+          </td>
+          <!-- 3. Total Call Volume -->
+          <td class="cell-call align-center total-cell">
+            <span class="total-val bold-val">{{ formatNumber(totalCEVolume()) }}</span>
+          </td>
+          <!-- 4. IV -->
+          <td class="cell-call align-center total-cell">-</td>
+
+          <!-- 5-8. Greeks dashes (if showGreeks) -->
+          <ng-container *ngIf="showGreeks()">
+            <td class="cell-call align-center total-cell">-</td>
+            <td class="cell-call align-center total-cell">-</td>
+            <td class="cell-call align-center total-cell">-</td>
+            <td class="cell-call align-center total-cell">-</td>
+          </ng-container>
+
+          <!-- LTP & CHNG -->
+          <td class="cell-call align-center total-cell">-</td>
+          <td class="cell-call align-center total-cell">-</td>
+
+          <!-- Bid/Ask dashes (if showBidAsk) -->
+          <ng-container *ngIf="showBidAsk()">
+            <td class="cell-call align-center total-cell">-</td>
+            <td class="cell-call align-center total-cell">-</td>
+            <td class="cell-call align-center total-cell">-</td>
+            <td class="cell-call align-center total-cell">-</td>
+          </ng-container>
+
+          <!-- 11. CENTER STRIKE / AGGREGATE LABEL -->
+          <td class="cell-strike align-center total-cell strike-total-label">
+            <div class="agg-title-box">
+              <span class="agg-total-text">TOTAL ({{ filteredStrikes().length }} STRIKES)</span>
+            </div>
+          </td>
+
+          <!-- PUTS TOTALS -->
+          <!-- Bid/Ask dashes (if showBidAsk) -->
+          <ng-container *ngIf="showBidAsk()">
+            <td class="cell-put align-center total-cell">-</td>
+            <td class="cell-put align-center total-cell">-</td>
+            <td class="cell-put align-center total-cell">-</td>
+            <td class="cell-put align-center total-cell">-</td>
+          </ng-container>
+
+          <!-- CHNG & LTP -->
+          <td class="cell-put align-center total-cell">-</td>
+          <td class="cell-put align-center total-cell">-</td>
+
+          <!-- Greeks dashes (if showGreeks) -->
+          <ng-container *ngIf="showGreeks()">
+            <td class="cell-put align-center total-cell">-</td>
+            <td class="cell-put align-center total-cell">-</td>
+            <td class="cell-put align-center total-cell">-</td>
+            <td class="cell-put align-center total-cell">-</td>
+          </ng-container>
+
+          <!-- IV -->
+          <td class="cell-put align-center total-cell">-</td>
+
+          <!-- 19. Total Put Volume -->
+          <td class="cell-put align-center total-cell">
+            <span class="total-val bold-val">{{ formatNumber(totalPEVolume()) }}</span>
+          </td>
+          <!-- 20. Total Put Chg OI -->
+          <td class="cell-put align-center total-cell">
+            <div class="agg-cell-content">
+              <span class="agg-mini-label">Total PE Chg:</span>
+              <span class="total-val bold-val" [class.neg-num]="totalChangePEOI() < 0" [class.pos-num]="totalChangePEOI() > 0">
+                <span *ngIf="totalChangePEOI() > 0">+</span>{{ formatNumber(totalChangePEOI()) }}
+              </span>
+            </div>
+          </td>
+          <!-- 21. Total Put OI -->
+          <td class="cell-put align-center total-cell">
+            <div class="agg-cell-content">
+              <span class="agg-mini-label">Total PE OI:</span>
+              <span class="total-val bold-val">{{ formatNumber(totalPEOI()) }}</span>
+            </div>
+          </td>
+
+          <!-- 22-23. Aggregate PCR Summary -->
+          <ng-container *ngIf="showPCR()">
+            <td class="cell-pcr align-center total-cell pcr-total-cell">
+              <div class="pcr-agg-block">
+                <span class="pcr-agg-num" [class.pcr-bullish]="pcr() >= 1" [class.pcr-bearish]="pcr() < 1">{{ pcr() }}</span>
+                <span class="pcr-agg-sub">Total Put ÷ Call</span>
+              </div>
+            </td>
+            <td class="cell-pcr align-center total-cell pcr-total-cell">
+              <div class="pcr-agg-block">
+                <span class="pcr-agg-num" [class.pos-num]="chgOiPcr() > 0" [class.neg-num]="chgOiPcr() < 0">{{ chgOiPcr() }}</span>
+                <span class="pcr-agg-sub">Total Put Chg ÷ Call Chg</span>
+              </div>
+            </td>
+          </ng-container>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <!-- Bottom Notification Ribbon -->
+  <div class="bottom-demo-bar">
+    <div class="demo-msg">
+      Hi user, you're viewing live/demo market data. Connect your broker to view today's live market execution.
+    </div>
+  </div>
+
+  <!-- Floating Scroll To Top Button -->
+  <button class="scroll-top-btn" (click)="scrollToTop()" matTooltip="Scroll to top">
+    <mat-icon>keyboard_arrow_up</mat-icon>
+  </button>
+</div>

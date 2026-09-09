@@ -1,0 +1,420 @@
+<div class="strike-pcr-container">
+  <!-- Header & Controls -->
+  <header class="pcr-header">
+    <div class="title-area">
+      <div class="title-with-badge">
+        <h2>Options Chain PCR Analysis</h2>
+        <span class="live-indicator" [class.live-active]="isLiveMode()">
+          <span class="pulse-dot"></span>
+          {{ isLiveMode() ? 'Live NSE' : 'Snapshot Mode' }}
+        </span>
+      </div>
+      <p class="subtitle">
+        Analyzing {{ strikeRange() }} strikes below + Selected Strike ({{ selectedStrike() || 'ATM' }}) + {{ strikeRange() }} strikes above (Total {{ strikes().length }} strikes)
+      </p>
+    </div>
+
+    <!-- Controls Panel -->
+    <div class="controls-panel">
+      <!-- Symbol Selector -->
+      <mat-form-field appearance="outline" class="control-field symbol-field">
+        <mat-label>Index</mat-label>
+        <mat-select [value]="selectedSymbol()" (valueChange)="onSymbolChange($event)">
+          <mat-option *ngFor="let idx of indices()" [value]="idx.symbol">
+            {{ idx.display_name || idx.name }}
+          </mat-option>
+          <mat-option *ngIf="!indices() || indices().length === 0" value="NIFTY">NIFTY 50</mat-option>
+          <mat-option *ngIf="!indices() || indices().length === 0" value="BANKNIFTY">BANK NIFTY</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <!-- Strike Selector -->
+      <mat-form-field appearance="outline" class="control-field strike-field">
+        <mat-label>Selected Strike</mat-label>
+        <mat-select [value]="selectedStrike()" (valueChange)="onStrikeChange($event)">
+          <mat-option *ngFor="let s of availableStrikes()" [value]="s">
+            {{ s }}
+            <span *ngIf="s === atmStrike()" class="option-atm-tag">(ATM)</span>
+          </mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <!-- Strike Range Selector (Configurable 3, 5, 7, 10 strikes) -->
+      <div class="range-selector-wrapper">
+        <span class="range-label">Strikes Each Side:</span>
+        <mat-button-toggle-group
+          [value]="strikeRange()"
+          (change)="onRangeChange($event.value)"
+          class="range-toggle-group"
+        >
+          <mat-button-toggle *ngFor="let opt of rangeOptions" [value]="opt.value" [matTooltip]="opt.label">
+            ±{{ opt.value }}
+          </mat-button-toggle>
+        </mat-button-toggle-group>
+      </div>
+
+      <!-- Expiry Selector -->
+      <mat-form-field *ngIf="expiries().length > 0" appearance="outline" class="control-field expiry-field">
+        <mat-label>Expiry</mat-label>
+        <mat-select [value]="selectedExpiry()" (valueChange)="onExpiryChange($event)">
+          <mat-option *ngFor="let exp of expiries()" [value]="exp">{{ exp }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <!-- Action Buttons -->
+      <div class="action-buttons">
+        <button
+          mat-stroked-button
+          color="accent"
+          (click)="toggleLiveMode()"
+          [class.active-toggle]="isLiveMode()"
+          matTooltip="Fetch real-time data directly from NSE"
+        >
+          <mat-icon>rss_feed</mat-icon>
+          <span>{{ isLiveMode() ? 'Live ON' : 'Live OFF' }}</span>
+        </button>
+
+        <button
+          mat-flat-button
+          color="primary"
+          (click)="fetchPCRAnalysis()"
+          [disabled]="isLoading()"
+          matTooltip="Refresh Data"
+        >
+          <mat-icon [class.spinning]="isLoading()">refresh</mat-icon>
+          <span>Refresh</span>
+        </button>
+
+        <mat-slide-toggle
+          [checked]="autoRefreshEnabled()"
+          (change)="toggleAutoRefresh()"
+          color="primary"
+          matTooltip="Auto-refresh every 30 seconds"
+        >
+          Auto (30s)
+        </mat-slide-toggle>
+      </div>
+    </div>
+  </header>
+
+  <!-- Quick Navigation Bar for Strikes -->
+  <div class="strike-quick-nav">
+    <div class="quick-nav-left">
+      <span class="nav-label">Quick Jump:</span>
+      <button mat-button class="nav-btn" (click)="shiftStrikeDown()" matTooltip="Select 1 strike lower">
+        <mat-icon>arrow_downward</mat-icon> Shift Lower
+      </button>
+      <button mat-button class="nav-btn atm-btn" (click)="selectATMStrike()" matTooltip="Jump to At-The-Money strike">
+        <mat-icon>my_location</mat-icon> Reset to ATM ({{ atmStrike() }})
+      </button>
+      <button mat-button class="nav-btn" (click)="shiftStrikeUp()" matTooltip="Select 1 strike higher">
+        <mat-icon>arrow_upward</mat-icon> Shift Higher
+      </button>
+    </div>
+
+    <div class="timestamp-tag" *ngIf="pcrData()?.timestamp">
+      <mat-icon class="time-icon">schedule</mat-icon>
+      <span>Last Updated: {{ pcrData()?.timestamp | date:'mediumTime' }}</span>
+    </div>
+  </div>
+
+  <!-- Loading Spinner -->
+  <div *ngIf="isLoading() && !pcrData()" class="loading-state">
+    <mat-spinner diameter="48"></mat-spinner>
+    <p>Calculating Options Chain PCR Analysis...</p>
+  </div>
+
+  <!-- Error State -->
+  <div *ngIf="error() && !pcrData()" class="error-banner">
+    <mat-icon>error_outline</mat-icon>
+    <div class="error-content">
+      <h4>Data Fetch Error</h4>
+      <p>{{ error() }}</p>
+      <button mat-flat-button color="primary" (click)="fetchPCRAnalysis()">Retry</button>
+    </div>
+  </div>
+
+  <!-- Main Content When Data Available -->
+  <div *ngIf="pcrData()" class="pcr-content">
+    <!-- Top Metric Summary Cards -->
+    <div class="metrics-grid">
+      <!-- Card 1: Underlying Spot -->
+      <mat-card class="metric-card spot-card">
+        <div class="card-header-icon">
+          <mat-icon class="icon-spot">trending_up</mat-icon>
+          <span class="metric-title">{{ selectedSymbol() }} Spot</span>
+        </div>
+        <div class="metric-main-value">
+          {{ underlyingPrice() | number:'1.2-2' }}
+        </div>
+        <div class="metric-footer">
+          <span class="atm-badge">ATM Strike: {{ atmStrike() }}</span>
+        </div>
+      </mat-card>
+
+      <!-- Card 2: Selected Strike Window -->
+      <mat-card class="metric-card target-card">
+        <div class="card-header-icon">
+          <mat-icon class="icon-target">center_focus_strong</mat-icon>
+          <span class="metric-title">Selected Window</span>
+        </div>
+        <div class="metric-main-value highlight-text">
+          {{ selectedStrike() }}
+        </div>
+        <div class="metric-footer">
+          <span>Range: ±{{ strikeRange() }} strikes ({{ strikes().length }} strikes total)</span>
+        </div>
+      </mat-card>
+
+      <!-- Card 3: Aggregate PCR (OI) -->
+      <mat-card class="metric-card pcr-card">
+        <div class="card-header-icon">
+          <mat-icon class="icon-pcr">donut_large</mat-icon>
+          <span class="metric-title">Aggregate PCR (OI)</span>
+        </div>
+        <div class="metric-main-value" [ngClass]="getPCRClass(aggregate()?.aggregatePcrOI)">
+          {{ formatPCR(aggregate()?.aggregatePcrOI) }}
+        </div>
+        <div class="metric-footer">
+          <span class="sentiment-pill" [ngClass]="getSentimentBadgeClass(aggregate()?.sentiment)">
+            {{ aggregate()?.sentiment?.replace('_', ' ') | uppercase }}
+          </span>
+        </div>
+      </mat-card>
+
+      <!-- Card 4: Aggregate PCR (Change in OI) -->
+      <mat-card class="metric-card chg-card">
+        <div class="card-header-icon">
+          <mat-icon class="icon-chg">swap_vert</mat-icon>
+          <span class="metric-title">Aggregate PCR (Chg OI)</span>
+        </div>
+        <div class="metric-main-value" [ngClass]="getChangeClass(aggregate()?.aggregatePcrChangeOI)">
+          {{ formatPCR(aggregate()?.aggregatePcrChangeOI) }}
+        </div>
+        <div class="metric-footer">
+          <span class="sub-text">
+            {{ (aggregate()?.totalPutChangeOI || 0) >= (aggregate()?.totalCallChangeOI || 0) ? 'Put Accumulation' : 'Call Writing' }}
+          </span>
+        </div>
+      </mat-card>
+    </div>
+
+    <!-- Sentiment Interpretation Banner -->
+    <div class="sentiment-bar" [ngClass]="getSentimentBadgeClass(aggregate()?.sentiment)">
+      <mat-icon class="sentiment-icon">
+        {{ aggregate()?.sentiment?.includes('bullish') ? 'trending_up' : (aggregate()?.sentiment?.includes('bearish') ? 'trending_down' : 'compare_arrows') }}
+      </mat-icon>
+      <div class="sentiment-details">
+        <strong>Market Interpretation ({{ strikes().length }}-Strike Window):</strong>
+        <span>{{ aggregate()?.interpretation }}</span>
+      </div>
+    </div>
+
+    <!-- PCR Table Card -->
+    <mat-card class="table-card">
+      <div class="table-header-toolbar">
+        <div class="table-title">
+          <h3>Strike-by-Strike PCR Matrix</h3>
+          <span class="table-subtitle">
+            Includes {{ strikeRange() }} strikes below + Selected Strike ({{ selectedStrike() }}) + {{ strikeRange() }} strikes above
+          </span>
+        </div>
+        <div class="legend-items">
+          <span class="legend-pill legend-selected"><span class="dot"></span> Selected Strike</span>
+          <span class="legend-pill legend-atm"><span class="dot"></span> ATM Strike</span>
+          <span class="legend-pill max-1st-legend">1st Highest</span>
+          <span class="legend-pill max-2nd-legend">2nd Highest</span>
+          <span class="legend-pill legend-ce">Calls (CE)</span>
+          <span class="legend-pill legend-pe">Puts (PE)</span>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="pcr-table">
+          <thead>
+            <!-- Group Header -->
+            <tr class="header-group-row">
+              <th colspan="2" class="group-ce">CALLS (CE)</th>
+              <th class="group-strike">STRIKE</th>
+              <th colspan="2" class="group-pe">PUTS (PE)</th>
+              <th colspan="2" class="group-pcr">PUT-CALL RATIOS (PCR)</th>
+            </tr>
+            <!-- Column Headers -->
+            <tr class="header-columns-row">
+              <th class="col-call-oi">Call OI</th>
+              <th class="col-call-chg">Call Chg in OI</th>
+              <th class="col-strike">Strike Price</th>
+              <th class="col-put-oi">Put OI</th>
+              <th class="col-put-chg">Put Chg in OI</th>
+              <th class="col-pcr-oi" matTooltip="Put OI ÷ Call OI">PCR (OI)</th>
+              <th class="col-pcr-chg" matTooltip="Put Chg OI ÷ Call Chg OI">PCR (Chg OI)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              *ngFor="let s of strikes()"
+              class="strike-row"
+              [class.row-selected]="s.isSelected"
+              [class.row-atm]="s.isAtm"
+              [class.row-below]="s.position === 'BELOW'"
+              [class.row-above]="s.position === 'ABOVE'"
+            >
+              <!-- Call OI -->
+              <td class="col-call-oi cell-number font-medium"
+                  [class.max-oi-cell]="isMaxCallOI(s.callOI)"
+                  [class.max-oi-cell-2nd]="isSecondMaxCallOI(s.callOI)">
+                <span>{{ formatNumber(s.callOI) }}</span>
+              </td>
+
+              <!-- Call Change in OI -->
+              <td class="col-call-chg cell-number"
+                  [ngClass]="getChangeClass(s.callChangeOI)"
+                  [class.max-chg-cell]="isMaxCallChangeOI(s.callChangeOI)"
+                  [class.max-chg-cell-2nd]="isSecondMaxCallChangeOI(s.callChangeOI)">
+                <span><span *ngIf="s.callChangeOI > 0">+</span>{{ formatNumber(s.callChangeOI) }}</span>
+              </td>
+
+              <!-- Strike Price -->
+              <td class="col-strike cell-strike">
+                <div class="strike-badge-container">
+                  <span class="strike-value">{{ s.strikePrice | number }}</span>
+                  <span *ngIf="s.isSelected" class="badge-tag selected-tag" matTooltip="Currently Selected Target Strike">SELECTED</span>
+                  <span *ngIf="s.isAtm" class="badge-tag atm-tag" matTooltip="At-The-Money Strike">ATM</span>
+                  <span class="position-subtag" *ngIf="!s.isSelected">
+                    {{ s.position === 'BELOW' ? '▼ Below' : '▲ Above' }}
+                  </span>
+                </div>
+              </td>
+
+              <!-- Put OI -->
+              <td class="col-put-oi cell-number font-medium"
+                  [class.max-oi-cell]="isMaxPutOI(s.putOI)"
+                  [class.max-oi-cell-2nd]="isSecondMaxPutOI(s.putOI)">
+                <span>{{ formatNumber(s.putOI) }}</span>
+              </td>
+
+              <!-- Put Change in OI -->
+              <td class="col-put-chg cell-number"
+                  [ngClass]="getChangeClass(s.putChangeOI)"
+                  [class.max-chg-cell]="isMaxPutChangeOI(s.putChangeOI)"
+                  [class.max-chg-cell-2nd]="isSecondMaxPutChangeOI(s.putChangeOI)">
+                <span><span *ngIf="s.putChangeOI > 0">+</span>{{ formatNumber(s.putChangeOI) }}</span>
+              </td>
+
+              <!-- PCR (OI) -->
+              <td class="col-pcr-oi cell-pcr">
+                <span class="pcr-pill" [ngClass]="getPCRClass(s.pcrOI)">
+                  {{ formatPCR(s.pcrOI) }}
+                </span>
+              </td>
+
+              <!-- PCR (Change in OI) -->
+              <td class="col-pcr-chg cell-pcr">
+                <span class="pcr-pill-sm" [ngClass]="getChangeClass(s.pcrChangeOI)">
+                  {{ formatPCR(s.pcrChangeOI) }}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+
+          <!-- Aggregate Summary Footer Row -->
+          <tfoot>
+            <tr class="aggregate-row" *ngIf="aggregate()">
+              <!-- Total Call OI -->
+              <td class="col-call-oi cell-number agg-total">
+                <div class="agg-cell-wrapper">
+                  <span class="agg-label">Total CE OI:</span>
+                  <span class="agg-val">{{ formatNumber(aggregate()?.totalCallOI) }}</span>
+                </div>
+              </td>
+
+              <!-- Total Call Change OI -->
+              <td class="col-call-chg cell-number agg-total" [ngClass]="getChangeClass(aggregate()?.totalCallChangeOI)">
+                <div class="agg-cell-wrapper">
+                  <span class="agg-label">Total CE Chg:</span>
+                  <span class="agg-val">
+                    <span *ngIf="(aggregate()?.totalCallChangeOI || 0) > 0">+</span>
+                    {{ formatNumber(aggregate()?.totalCallChangeOI) }}
+                  </span>
+                </div>
+              </td>
+
+              <!-- Aggregate Strike Label -->
+              <td class="col-strike cell-strike agg-strike-cell">
+                <div class="agg-title-badge">
+                  <mat-icon>functions</mat-icon>
+                  <span>AGGREGATE ({{ strikes().length }} STRIKES)</span>
+                </div>
+              </td>
+
+              <!-- Total Put OI -->
+              <td class="col-put-oi cell-number agg-total">
+                <div class="agg-cell-wrapper">
+                  <span class="agg-label">Total PE OI:</span>
+                  <span class="agg-val">{{ formatNumber(aggregate()?.totalPutOI) }}</span>
+                </div>
+              </td>
+
+              <!-- Total Put Change OI -->
+              <td class="col-put-chg cell-number agg-total" [ngClass]="getChangeClass(aggregate()?.totalPutChangeOI)">
+                <div class="agg-cell-wrapper">
+                  <span class="agg-label">Total PE Chg:</span>
+                  <span class="agg-val">
+                    <span *ngIf="(aggregate()?.totalPutChangeOI || 0) > 0">+</span>
+                    {{ formatNumber(aggregate()?.totalPutChangeOI) }}
+                  </span>
+                </div>
+              </td>
+
+              <!-- Aggregate PCR (OI) -->
+              <td class="col-pcr-oi cell-pcr agg-pcr-cell">
+                <div class="agg-pcr-box">
+                  <span class="agg-pcr-badge" [ngClass]="getPCRClass(aggregate()?.aggregatePcrOI)">
+                    {{ formatPCR(aggregate()?.aggregatePcrOI) }}
+                  </span>
+                  <span class="agg-pcr-sub">Total Put ÷ Call</span>
+                </div>
+              </td>
+
+              <!-- Aggregate PCR (Chg OI) -->
+              <td class="col-pcr-chg cell-pcr agg-pcr-cell">
+                <div class="agg-pcr-box">
+                  <span class="agg-pcr-badge-sm" [ngClass]="getChangeClass(aggregate()?.aggregatePcrChangeOI)">
+                    {{ formatPCR(aggregate()?.aggregatePcrChangeOI) }}
+                  </span>
+                  <span class="agg-pcr-sub">Total Put Chg ÷ Call Chg</span>
+                </div>
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </mat-card>
+
+    <!-- PCR Analysis Formulas & Reference Guide -->
+    <mat-card class="guide-card">
+      <div class="guide-header">
+        <mat-icon class="info-icon">info</mat-icon>
+        <h4>PCR Analysis Reference & Guidelines</h4>
+      </div>
+      <div class="guide-grid">
+        <div class="guide-col">
+          <h5>Formulas</h5>
+          <ul>
+            <li><strong>PCR (OI):</strong> <code>Put OI ÷ Call OI</code> (Values > 1.0 indicate bullish put writing bias, < 1.0 indicate bearish call writing bias).</li>
+            <li><strong>PCR (Change in OI):</strong> <code>Put Change in OI ÷ Call Change in OI</code> (Measures intraday positional accumulation & momentum shifts).</li>
+            <li><strong>Safe Division:</strong> Missing strikes and zero denominators are safely handled without producing <code>NaN</code> or runtime errors.</li>
+          </ul>
+        </div>
+        <div class="guide-col">
+          <h5>Sentiment Interpretation</h5>
+          <ul>
+            <li><span class="pcr-badge-sample sample-bullish">PCR > 1.20</span> <strong>Bullish:</strong> Traders selling aggressive puts as support.</li>
+            <li><span class="pcr-badge-sample sample-neutral">0.80 - 1.20</span> <strong>Neutral / Range-bound:</strong> Balanced call and put positioning.</li>
+            <li><span class="pcr-badge-sample sample-bearish">PCR < 0.80</span> <strong>Bearish:</strong> Traders selling heavy calls creating overhead resistance.</li>
+          </ul>
+        </div>
+      </div>
+    </mat-card>
+  </div>
+</div>
