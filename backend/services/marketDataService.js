@@ -22,16 +22,7 @@
 const models = require('../models');
 const nseApiService = require('./nseApiService');
 
-const OFFICIAL_EXPIRIES = [
-  '08-Sep-2026',
-  '15-Sep-2026',
-  '22-Sep-2026',
-  '29-Sep-2026',
-  '06-Oct-2026',
-  '27-Oct-2026',
-  '24-Nov-2026',
-  '29-Dec-2026',
-];
+const OFFICIAL_EXPIRIES = [];
 
 const generateUpcomingExpiries = (symbol = 'NIFTY', count = 10) => {
   return OFFICIAL_EXPIRIES;

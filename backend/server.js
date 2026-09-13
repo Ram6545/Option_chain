@@ -280,16 +280,7 @@ const isCurrentOrFutureExpiry = (dateStr) => {
   return d.getTime() >= today.getTime() - 24 * 60 * 60 * 1000;
 };
 
-const OFFICIAL_EXPIRIES = [
-  '08-Sep-2026',
-  '15-Sep-2026',
-  '22-Sep-2026',
-  '29-Sep-2026',
-  '06-Oct-2026',
-  '27-Oct-2026',
-  '24-Nov-2026',
-  '29-Dec-2026',
-];
+const OFFICIAL_EXPIRIES = [];
 
 /**
  * Resilient market fallback generator
@@ -367,7 +358,22 @@ const generateMarketFallback = (symbol, expiry = null) => {
  */
 const getOptionChain = async (symbol, expiry = null) => {
   const upper = (symbol || 'NIFTY').toUpperCase().trim();
-  const trimmedExpiry = expiry ? expiry.trim() : null;
+  let trimmedExpiry = expiry ? expiry.trim() : null;
+
+  // If no expiry is provided, auto-resolve the nearest active expiry from contract-info
+  if (!trimmedExpiry) {
+    try {
+      const contractInfo = await fetchNSEJson(`https://www.nseindia.com/api/option-chain-contract-info?symbol=${encodeURIComponent(upper)}`);
+      if (contractInfo?.expiryDates && contractInfo.expiryDates.length > 0) {
+        const validExpiries = contractInfo.expiryDates.filter(isCurrentOrFutureExpiry);
+        trimmedExpiry = validExpiries[0] || contractInfo.expiryDates[0];
+        console.log(`🎯 [Auto-resolved Nearest Expiry for ${upper}]:`, trimmedExpiry);
+      }
+    } catch (e) {
+      console.warn(`⚠️ Could not auto-resolve expiry from contract-info for ${upper}:`, e.message);
+    }
+  }
+
   const cacheKey = `${upper}:${trimmedExpiry || 'all'}`;
 
   if (cache.has(cacheKey) && Date.now() - cache.get(cacheKey).time < CACHE_TTL_MS) {
@@ -425,7 +431,18 @@ const getOptionChain = async (symbol, expiry = null) => {
     expiryDates = allExpiryDates.length > 0 ? allExpiryDates : OFFICIAL_EXPIRIES;
   }
 
-  const targetExpiry = trimmedExpiry || raw.selectedExpiry || records.selectedExpiry || expiryDates[0] || null;
+  let targetExpiry = trimmedExpiry || raw.selectedExpiry || records.selectedExpiry || expiryDates[0] || null;
+
+  // If trimmedExpiry was not known initially, retry v3 with the discovered targetExpiry
+  if (!trimmedExpiry && targetExpiry) {
+    trimmedExpiry = targetExpiry;
+    const v3RetryUrl = `https://www.nseindia.com/api/option-chain-v3?type=${isIndex ? 'Indices' : 'Equities'}&symbol=${encodeURIComponent(upper)}&expiry=${encodeURIComponent(trimmedExpiry)}`;
+    console.log('📡 [Retrying NSE v3 URL with resolved expiry]:', v3RetryUrl);
+    const v3Retry = await fetchNSEJson(v3RetryUrl);
+    if (v3Retry && (v3Retry.records || v3Retry.filtered)) {
+      raw = v3Retry;
+    }
+  }
 
   // Extract raw rows
   let rawRows = [];

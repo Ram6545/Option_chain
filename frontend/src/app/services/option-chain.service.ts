@@ -42,9 +42,13 @@ export class OptionChainService {
    * Get the latest option chain data for a given index symbol.
    * @param symbol - Index symbol (e.g., 'NIFTY', 'BANKNIFTY')
    * @param limit - Optional limit on number of strikes to return
+   * @param expiry - Optional expiry date
    */
-  getOptionChain(symbol: string, limit?: number): Observable<OptionChainResponse> {
-    const params = limit ? `?limit=${limit}` : '';
+  getOptionChain(symbol: string, limit?: number, expiry?: string): Observable<OptionChainResponse> {
+    const queryParams: string[] = [];
+    if (limit) queryParams.push(`limit=${limit}`);
+    if (expiry) queryParams.push(`expiry=${encodeURIComponent(expiry)}`);
+    const params = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
     return this.http.get<OptionChainResponse>(`${this.apiUrl}/option-chain/${symbol}${params}`);
   }
 

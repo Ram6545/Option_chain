@@ -61,6 +61,7 @@ const getOptionChain = async (req, res, next) => {
 
     // Transform data for frontend consumption
     const transformed = transformOptionChain(chain, limit, upperSymbol);
+    console.log("----------------------------------", transformed);
 
     res.json({
       success: true,
@@ -468,16 +469,7 @@ const getStrikePrices = async (req, res, next) => {
   }
 };
 
-const OFFICIAL_EXPIRIES = [
-  '08-Sep-2026',
-  '15-Sep-2026',
-  '22-Sep-2026',
-  '29-Sep-2026',
-  '06-Oct-2026',
-  '27-Oct-2026',
-  '24-Nov-2026',
-  '29-Dec-2026',
-];
+const OFFICIAL_EXPIRIES = [];
 
 /**
  * Get available expiry dates for an index from NSE.
