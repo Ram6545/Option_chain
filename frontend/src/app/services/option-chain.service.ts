@@ -16,6 +16,7 @@ import {
   ContractInfoResponse,
   LiveOptionChainResponse,
   StrikePCRAnalysisResponse,
+  PreMarketPCRResponse,
 } from '../models/option-chain.model';
 
 /**
@@ -261,5 +262,55 @@ export class OptionChainService {
       switchMap(() => this.getStrikePCRAnalysis(symbol, options)),
       shareReplay(1)
     );
+  }
+
+  /**
+   * Get Pre-Market Open ATM Average PCR analysis.
+   * @param symbol - Index symbol (e.g. 'NIFTY')
+   * @param options - Optional parameters: preMarketOpen, strikeRange, expiry, live
+   */
+  getPreMarketPCR(
+    symbol: string,
+    options?: {
+      preMarketOpen?: number;
+      strikeRange?: number;
+      expiry?: string;
+      live?: boolean;
+    }
+  ): Observable<PreMarketPCRResponse> {
+    const queryParams: string[] = [];
+    if (options?.preMarketOpen !== undefined && options.preMarketOpen !== null) {
+      queryParams.push(`preMarketOpen=${options.preMarketOpen}`);
+    }
+    if (options?.strikeRange !== undefined && options.strikeRange !== null) {
+      queryParams.push(`strikeRange=${options.strikeRange}`);
+    }
+    if (options?.expiry) {
+      queryParams.push(`expiry=${encodeURIComponent(options.expiry)}`);
+    }
+    if (options?.live !== undefined) {
+      queryParams.push(`live=${options.live}`);
+    }
+    const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
+    return this.http.get<PreMarketPCRResponse>(
+      `${this.apiUrl}/option-chain/${symbol}/pre-market-pcr${queryString}`
+    );
+  }
+
+  /**
+   * Save or update pre-market open price in the backend.
+   * @param symbol - Index symbol
+   * @param preMarketOpen - Open price
+   * @param tradeDate - Optional trade date string
+   */
+  savePreMarketOpen(
+    symbol: string,
+    preMarketOpen: number,
+    tradeDate?: string
+  ): Observable<any> {
+    return this.http.post(`${this.apiUrl}/option-chain/${symbol}/pre-market-open`, {
+      preMarketOpen,
+      tradeDate,
+    });
   }
 }

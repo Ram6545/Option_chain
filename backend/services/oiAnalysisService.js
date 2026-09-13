@@ -552,6 +552,157 @@ const calculateStrikePCRAnalysis = (optionChain, selectedStrike = null, strikeRa
   };
 };
 
+/**
+ * Calculate Average PCR based on Pre-Market Open price and its corresponding ATM strike price.
+ *
+ * Example:
+ * Pre-market open = 23,410
+ * ATM Strike = 23,450
+ * Strike Range = 3 (±3 strikes around ATM)
+ * Selected Strikes: [23300, 23350, 23400, 23450, 23500, 23550, 23600]
+ * Total Call OI = SUM(Call OI of selected strikes)
+ * Total Put OI = SUM(Put OI of selected strikes)
+ * Average PCR = Total Put OI / Total Call OI
+ *
+ * @param {Object} optionChain - Option chain data (raw data array or pre-processed strikes)
+ * @param {number} preMarketOpen - Pre-market open price (e.g. 23410)
+ * @param {number} [strikeRange=3] - Number of strikes on each side of ATM (default 3)
+ * @param {number} [configuredStep] - Optional strike interval (50 or 100)
+ * @returns {Object} Pre-market PCR analysis data
+ */
+const calculatePreMarketPCR = (optionChain, preMarketOpen, strikeRange = 3, configuredStep = null) => {
+  const rawData = optionChain?.data || [];
+  const range = Math.max(1, parseInt(strikeRange, 10) || 3);
+  const openPrice = parseFloat(preMarketOpen);
+
+  if (isNaN(openPrice) || openPrice <= 0) {
+    return {
+      preMarketOpen: 0,
+      atmStrike: 0,
+      strikeRange: range,
+      selectedStrikes: [],
+      totalCallOI: 0,
+      totalPutOI: 0,
+      averagePCR: 0,
+    };
+  }
+
+  // 1. Group CE and PE by strike price (handles duplicate records by summing)
+  const strikesMap = new Map();
+  for (const item of rawData) {
+    const strike = parseFloat(item.strike_price ?? item.strikePrice);
+    if (isNaN(strike)) continue;
+
+    if (!strikesMap.has(strike)) {
+      strikesMap.set(strike, {
+        strikePrice: strike,
+        callOI: 0,
+        putOI: 0,
+      });
+    }
+
+    const entry = strikesMap.get(strike);
+    const optType = (item.option_type || '').toUpperCase();
+    const oi = parseInt(item.oi ?? (optType === 'CE' ? item.ce?.oi : item.pe?.oi) ?? 0, 10) || 0;
+
+    if (optType === 'CE') {
+      entry.callOI += oi;
+    } else if (optType === 'PE') {
+      entry.putOI += oi;
+    } else {
+      // If item contains both CE and PE objects (like transformed strikes)
+      if (item.ce?.oi) entry.callOI += parseInt(item.ce.oi, 10) || 0;
+      if (item.pe?.oi) entry.putOI += parseInt(item.pe.oi, 10) || 0;
+    }
+  }
+
+  // Sorted unique strikes
+  let sortedStrikes = Array.from(strikesMap.keys()).sort((a, b) => a - b);
+
+  // Determine strike step (50 for NIFTY, 100 for BANKNIFTY)
+  let step = configuredStep;
+  if (!step || isNaN(step)) {
+    if (sortedStrikes.length >= 2) {
+      step = Math.abs(sortedStrikes[1] - sortedStrikes[0]);
+    } else {
+      const sym = (optionChain?.symbol || '').toUpperCase();
+      step = sym === 'BANKNIFTY' ? 100 : 50;
+    }
+  }
+
+  // 2. Determine ATM Strike from Pre-market Open
+  // Rule: first strike >= openPrice (e.g. for 23,410 with step 50, first strike >= 23,410 is 23,450)
+  let atmStrike = null;
+  if (sortedStrikes.length > 0) {
+    const match = sortedStrikes.find((s) => s >= openPrice);
+    if (match !== undefined) {
+      atmStrike = match;
+    } else {
+      atmStrike = sortedStrikes[sortedStrikes.length - 1];
+    }
+  } else {
+    atmStrike = Math.ceil(openPrice / step) * step;
+  }
+
+  // If sortedStrikes is empty, return structured fallback
+  let selectedStrikes = [];
+  if (sortedStrikes.length === 0) {
+    for (let i = -range; i <= range; i++) {
+      selectedStrikes.push(atmStrike + i * step);
+    }
+    return {
+      preMarketOpen: openPrice,
+      atmStrike,
+      strikeRange: range,
+      selectedStrikes,
+      totalCallOI: 0,
+      totalPutOI: 0,
+      averagePCR: 0,
+    };
+  }
+
+  // 3. Select ATM ± N strikes
+  let atmIdx = sortedStrikes.indexOf(atmStrike);
+  if (atmIdx === -1) {
+    atmStrike = sortedStrikes.reduce((closest, s) =>
+      Math.abs(s - atmStrike) < Math.abs(closest - atmStrike) ? s : closest,
+      sortedStrikes[0]
+    );
+    atmIdx = sortedStrikes.indexOf(atmStrike);
+  }
+
+  const startIdx = Math.max(0, atmIdx - range);
+  const endIdx = Math.min(sortedStrikes.length - 1, atmIdx + range);
+  selectedStrikes = sortedStrikes.slice(startIdx, endIdx + 1);
+
+  // 4. Calculate Total Call OI & Total Put OI
+  let totalCallOI = 0;
+  let totalPutOI = 0;
+
+  for (const s of selectedStrikes) {
+    const data = strikesMap.get(s);
+    if (data) {
+      totalCallOI += data.callOI || 0;
+      totalPutOI += data.putOI || 0;
+    }
+  }
+
+  // 5. Calculate Average PCR = Total Put OI / Total Call OI
+  const averagePCR = totalCallOI > 0
+    ? parseFloat((totalPutOI / totalCallOI).toFixed(2))
+    : 0;
+
+  return {
+    preMarketOpen: openPrice,
+    atmStrike,
+    strikeRange: range,
+    selectedStrikes,
+    totalCallOI,
+    totalPutOI,
+    averagePCR,
+  };
+};
+
 module.exports = {
   analyzeOI,
   determineSentiment,
@@ -560,4 +711,5 @@ module.exports = {
   findATMStrikes,
   analyzeATMConcentration,
   calculateStrikePCRAnalysis,
+  calculatePreMarketPCR,
 };

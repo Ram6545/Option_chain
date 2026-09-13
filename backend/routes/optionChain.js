@@ -24,6 +24,13 @@ router.get('/option-chain/:symbol/analysis', controller.getOIAnalysis);
 // Query params: ?selectedStrike=24200&strikeRange=3&expiry=18-Aug-2026&live=false
 router.get('/option-chain/:symbol/pcr-analysis', controller.getStrikePCRAnalysis);
 
+// GET /api/option-chain/:symbol/pre-market-pcr - Get Average PCR based on Pre-Market Open ATM Strike
+// Query params: ?strikeRange=3&expiry=15-Sep-2026&live=false
+router.get('/option-chain/:symbol/pre-market-pcr', controller.getPreMarketPCR);
+
+// POST /api/option-chain/:symbol/pre-market-open - Save/Update Pre-Market Open price
+router.post('/option-chain/:symbol/pre-market-open', controller.savePreMarketOpen);
+
 // POST /api/option-chain/:symbol/refresh - Refresh option chain data
 // Query params: ?expiry=18-Aug-2026
 router.post('/option-chain/:symbol/refresh', controller.refreshOptionChain);
