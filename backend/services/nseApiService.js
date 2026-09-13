@@ -264,7 +264,22 @@ const isIndex = (symbol) => {
 */
 const getOptionChainData = async (symbol, expiry = null) => {
   const upperSymbol = (symbol || 'NIFTY').toUpperCase().trim();
-  const trimmedExpiry = expiry ? expiry.trim() : null;
+  let trimmedExpiry = expiry ? expiry.trim() : null;
+
+  // Auto-resolve nearest active expiry if not provided
+  if (!trimmedExpiry) {
+    try {
+      const contractInfo = await fetchNSEJson(`${NSE_BASE_URL}/api/option-chain-contract-info?symbol=${encodeURIComponent(upperSymbol)}`);
+      if (contractInfo?.expiryDates && contractInfo.expiryDates.length > 0) {
+        const validExpiries = contractInfo.expiryDates.filter(isCurrentOrFutureExpiry);
+        trimmedExpiry = validExpiries[0] || contractInfo.expiryDates[0];
+        console.log(`🎯 [Auto-resolved Nearest Expiry in nseApiService for ${upperSymbol}]:`, trimmedExpiry);
+      }
+    } catch (e) {
+      console.warn(`⚠️ Could not auto-resolve expiry in nseApiService for ${upperSymbol}:`, e.message);
+    }
+  }
+
   const cacheKey = `nse:live-chain:${upperSymbol}:${trimmedExpiry || 'all'}`;
 
   // Check cache

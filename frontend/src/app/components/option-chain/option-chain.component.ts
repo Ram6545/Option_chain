@@ -755,13 +755,15 @@ export class OptionChainComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    console.log('[ngOnInit] Initial Expiry Value:', this.expiries(), 'Selected Expiry:', this.selectedExpiry());
-
+    console.log('[ngOnInit] Initializing Option Chain...');
     this.loadIndices();
-    this.loadOptionChain();
     this.loadStrikePrices();
-    this.loadExpiries();
     this.loadNSEUnderlyingPrice();
+    // Load expiries first to get the nearest active expiry (e.g. 15-Sep-2026),
+    // and then immediately send that expiry to backend on initial load.
+    this.loadExpiries(() => {
+      this.loadOptionChain();
+    });
     this.setupAutoRefresh();
   }
 
@@ -795,7 +797,8 @@ export class OptionChainComponent implements OnInit, OnDestroy {
     this.isLoading.set(true);
     this.error.set(null);
 
-    this.optionChainService.getOptionChain(this.selectedSymbol(), this.strikeLimit()).subscribe({
+    const exp = this.selectedExpiry() || this.nearestExpiry() || undefined;
+    this.optionChainService.getOptionChain(this.selectedSymbol(), this.strikeLimit(), exp).subscribe({
       next: (response) => {
         this.optionChainData.set(response.data);
         this.isLoading.set(false);
@@ -813,8 +816,9 @@ export class OptionChainComponent implements OnInit, OnDestroy {
     this.error.set(null);
 
     const options: { expiry?: any; limit?: number } = {};
-    if (this.selectedExpiry()) {
-      options.expiry = this.selectedExpiry();
+    const exp = this.selectedExpiry() || this.nearestExpiry();
+    if (exp) {
+      options.expiry = exp;
     }
     options.limit = this.strikeLimit();
 
@@ -822,10 +826,17 @@ export class OptionChainComponent implements OnInit, OnDestroy {
       next: (response: any) => {
         this.optionChainData.set(response.data);
         if (response.expiryDates && response.expiryDates.length > 0) {
-          this.expiries.set(response.expiryDates);
+          const rawList = response.expiryDates;
+          const validExpiries = rawList.filter((e: string) => this.isCurrentOrFutureExpiry(e));
+          const listToUse = validExpiries.length > 0 ? validExpiries : rawList;
+          this.expiries.set(listToUse);
+
+          const defaultExp = response.selectedExpiry || listToUse[0];
+          if (!this.nearestExpiry()) {
+            this.nearestExpiry.set(listToUse[0]);
+          }
           if (!this.selectedExpiry()) {
-            this.selectedExpiry.set(response.selectedExpiry || response.expiryDates[0]);
-            this.nearestExpiry.set(response.expiryDates[0]);
+            this.selectedExpiry.set(defaultExp);
           }
         }
         if (response.data?.underlyingPrice) {
@@ -898,7 +909,7 @@ export class OptionChainComponent implements OnInit, OnDestroy {
     return d >= today;
   }
 
-  loadExpiries(): void {
+  loadExpiries(onComplete?: (selectedExp: string) => void): void {
     this.isExpiriesLoading.set(true);
     this.optionChainService.getExpiries(this.selectedSymbol()).subscribe({
       next: (response: ExpiriesResponse) => {
@@ -908,20 +919,28 @@ export class OptionChainComponent implements OnInit, OnDestroy {
 
         console.log('[loadExpiries] Fetched Expiries for', this.selectedSymbol(), ':', listToUse);
 
+        let activeExp = this.selectedExpiry();
         if (listToUse.length > 0) {
           this.expiries.set(listToUse);
           const nearest = response.nearestExpiry || listToUse[0];
           this.nearestExpiry.set(nearest);
-          if (!this.selectedExpiry() || !listToUse.includes(this.selectedExpiry()!)) {
+          if (!activeExp || !listToUse.includes(activeExp)) {
+            activeExp = nearest;
             this.selectedExpiry.set(nearest);
           }
           console.log('[loadExpiries] Active Selected Expiry:', this.selectedExpiry(), 'Nearest:', this.nearestExpiry());
         }
         this.isExpiriesLoading.set(false);
+        if (onComplete) {
+          onComplete(activeExp || this.nearestExpiry() || '');
+        }
       },
       error: (err) => {
         console.error('Error loading expiries from NSE:', err);
         this.isExpiriesLoading.set(false);
+        if (onComplete) {
+          onComplete(this.selectedExpiry() || this.nearestExpiry() || '');
+        }
       },
     });
   }
@@ -983,10 +1002,12 @@ export class OptionChainComponent implements OnInit, OnDestroy {
   changeSymbol(symbol: string): void {
     this.selectedSymbol.set(symbol);
     this.selectedExpiry.set(null);
-    this.loadOptionChain();
+    this.nearestExpiry.set(null);
     this.loadStrikePrices();
-    this.loadExpiries();
     this.loadNSEUnderlyingPrice();
+    this.loadExpiries(() => {
+      this.loadOptionChain();
+    });
   }
 
   getStrikeLimitLabel(): string {
