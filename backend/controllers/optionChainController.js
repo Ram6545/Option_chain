@@ -686,9 +686,25 @@ const getStrikePCRAnalysis = async (req, res, next) => {
       range
     );
 
+    // Also attach Pre-market ATM PCR calculation
+    let preOpen = req.query.preMarketOpen ? parseFloat(req.query.preMarketOpen) : null;
+    if (!preOpen || isNaN(preOpen)) {
+      preOpen = await models.getPreMarketOpen(upperSymbol);
+    }
+    if (!preOpen || isNaN(preOpen)) {
+      preOpen = chain.underlyingPrice || null;
+    }
+
+    const preMarketPCR = preOpen
+      ? oiAnalysisService.calculatePreMarketPCR(chain, preOpen, range)
+      : null;
+
     res.json({
       success: true,
-      data: pcrAnalysis,
+      data: {
+        ...pcrAnalysis,
+        preMarket: preMarketPCR,
+      },
     });
   } catch (error) {
     if (error.message && error.message.includes('not found')) {
@@ -701,6 +717,122 @@ const getStrikePCRAnalysis = async (req, res, next) => {
   }
 };
 
+/**
+ * Get Average PCR based on pre-market open price and its corresponding ATM strike.
+ * GET /api/option-chain/:symbol/pre-market-pcr
+ * Query params:
+ *   - preMarketOpen: e.g. 23410
+ *   - strikeRange: e.g. 3 (default 3 => 7 strikes total)
+ *   - expiry: e.g. 15-Sep-2026
+ *   - live: 'true' / 'false'
+ */
+const getPreMarketPCR = async (req, res, next) => {
+  try {
+    const { symbol } = req.params;
+    const { preMarketOpen, strikeRange, expiry, live } = req.query;
+    const upperSymbol = symbol.toUpperCase();
+    const range = parseInt(strikeRange, 10) || 3;
+
+    // 1. Resolve preMarketOpen: query param -> database table / indices column -> fallback
+    let openPrice = preMarketOpen !== undefined && preMarketOpen !== '' ? parseFloat(preMarketOpen) : null;
+    if (openPrice === null || isNaN(openPrice)) {
+      openPrice = await models.getPreMarketOpen(upperSymbol);
+    }
+
+    // 2. Fetch option chain (live or database)
+    let chain = null;
+    if (live === 'true') {
+      let nseData = await nseApiService.getOptionChainData(upperSymbol, expiry || null);
+      if (!nseData || !nseData.data || nseData.data.length === 0) {
+        const mockData = await marketDataService.fetchFromMarketAPI(upperSymbol, expiry || null);
+        nseData = {
+          data: mockData.data,
+          underlyingPrice: mockData.underlyingPrice,
+          timestamp: mockData.timestamp,
+          symbol: upperSymbol,
+        };
+      }
+      chain = {
+        symbol: upperSymbol,
+        data: nseData.data,
+        underlyingPrice: nseData.underlyingPrice,
+        timestamp: nseData.timestamp,
+      };
+    } else {
+      chain = await marketDataService.getLatestOptionChain(upperSymbol);
+      if (!chain || !chain.data || chain.data.length === 0) {
+        const liveData = await marketDataService.fetchFromMarketAPI(upperSymbol, expiry || null);
+        chain = {
+          symbol: upperSymbol,
+          data: liveData.data,
+          underlyingPrice: liveData.underlyingPrice,
+          timestamp: liveData.timestamp,
+        };
+      }
+    }
+
+    if (!chain || !chain.data || chain.data.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: `No option chain data available for ${upperSymbol}`,
+      });
+    }
+
+    if (openPrice === null || isNaN(openPrice) || openPrice <= 0) {
+      openPrice = chain.underlyingPrice || null;
+    }
+
+    if (!openPrice) {
+      return res.status(404).json({
+        success: false,
+        error: `No opening price or underlying price available for ${upperSymbol}`,
+      });
+    }
+
+    const indexRecord = await models.getIndexBySymbol(upperSymbol);
+    const strikeStep = indexRecord?.strike_step || (upperSymbol === 'BANKNIFTY' ? 100 : 50);
+
+    const result = oiAnalysisService.calculatePreMarketPCR(
+      chain,
+      openPrice,
+      range,
+      strikeStep
+    );
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Save or update pre-market open price.
+ * POST /api/option-chain/:symbol/pre-market-open
+ */
+const savePreMarketOpen = async (req, res, next) => {
+  try {
+    const { symbol } = req.params;
+    const { preMarketOpen, tradeDate } = req.body;
+    const upperSymbol = symbol.toUpperCase();
+
+    if (preMarketOpen === undefined || isNaN(parseFloat(preMarketOpen))) {
+      return res.status(400).json({ success: false, error: 'preMarketOpen must be a valid number' });
+    }
+
+    const saved = await models.upsertPreMarketOpen(upperSymbol, parseFloat(preMarketOpen), tradeDate);
+    res.json({
+      success: true,
+      message: `Pre-market open price saved for ${upperSymbol}`,
+      data: saved,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getIndices,
   getOptionChain,
@@ -709,6 +841,8 @@ module.exports = {
   getSnapshotData,
   getOIAnalysis,
   getStrikePCRAnalysis,
+  getPreMarketPCR,
+  savePreMarketOpen,
   refreshOptionChain,
   getUnderlyingPrice,
   getNSEUnderlyingPrice,

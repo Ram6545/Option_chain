@@ -11,7 +11,7 @@ const db = require('../config/db');
  */
 const getIndices = async () => {
   const result = await db.query(
-    'SELECT id, name, symbol, display_name, lot_size, COALESCE(strike_step, 50) as strike_step, is_active FROM indices WHERE is_active = true ORDER BY id'
+    'SELECT id, name, symbol, display_name, lot_size, COALESCE(strike_step, 50) as strike_step, pre_market_open, is_active FROM indices WHERE is_active = true ORDER BY id'
   );
   return result.rows;
 };
@@ -23,7 +23,7 @@ const getIndices = async () => {
  */
 const getIndexBySymbol = async (symbol) => {
   const result = await db.query(
-    'SELECT id, name, symbol, display_name, lot_size, COALESCE(strike_step, 50) as strike_step, is_active FROM indices WHERE symbol = $1',
+    'SELECT id, name, symbol, display_name, lot_size, COALESCE(strike_step, 50) as strike_step, pre_market_open, is_active FROM indices WHERE symbol = $1',
     [symbol.toUpperCase()]
   );
   return result.rows[0] || null;
@@ -350,7 +350,21 @@ const initializeDatabase = async () => {
 
   try {
     await db.query(`ALTER TABLE indices ADD COLUMN IF NOT EXISTS strike_step INTEGER DEFAULT 50;`);
+    await db.query(`ALTER TABLE indices ADD COLUMN IF NOT EXISTS pre_market_open DECIMAL(12,2);`);
   } catch (e) {}
+
+  // 1b. Table: pre_market_data
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS pre_market_data (
+      id SERIAL PRIMARY KEY,
+      index_id INTEGER NOT NULL REFERENCES indices(id) ON DELETE CASCADE,
+      pre_market_open DECIMAL(12,2) NOT NULL,
+      trade_date DATE NOT NULL DEFAULT CURRENT_DATE,
+      timestamp TIMESTAMP DEFAULT NOW(),
+      created_at TIMESTAMP DEFAULT NOW(),
+      CONSTRAINT uq_index_trade_date UNIQUE (index_id, trade_date)
+    );
+  `);
 
   // 2. Table: underlying_prices
   await db.query(`
@@ -406,27 +420,28 @@ const initializeDatabase = async () => {
     await db.query(`CREATE INDEX IF NOT EXISTS idx_snapshots_timestamp ON option_chain_snapshots(timestamp DESC);`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_underlying_index ON underlying_prices(index_id);`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_underlying_timestamp ON underlying_prices(timestamp DESC);`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_pre_market_index ON pre_market_data(index_id);`);
   } catch (e) {}
 
   // 6. Insert / Upsert standard market indices
   const standardIndices = [
-    { name: 'NIFTY 50', symbol: 'NIFTY', displayName: 'NIFTY 50', lotSize: 65, strikeStep: 50 },
-    { name: 'BANK NIFTY', symbol: 'BANKNIFTY', displayName: 'BANK NIFTY', lotSize: 15, strikeStep: 100 },
-    { name: 'NIFTY FINANCIAL SERVICES', symbol: 'FINNIFTY', displayName: 'FIN NIFTY', lotSize: 65, strikeStep: 50 },
-    { name: 'NIFTY MIDCAP SELECT', symbol: 'MIDCPNIFTY', displayName: 'MIDCAP NIFTY', lotSize: 120, strikeStep: 25 },
-    { name: 'NIFTY NEXT 50', symbol: 'NIFTYNXT50', displayName: 'NIFTY NEXT 50', lotSize: 25, strikeStep: 100 },
+    { name: 'NIFTY 50', symbol: 'NIFTY', displayName: 'NIFTY 50', lotSize: 65, strikeStep: 50, preMarketOpen: null },
+    { name: 'BANK NIFTY', symbol: 'BANKNIFTY', displayName: 'BANK NIFTY', lotSize: 15, strikeStep: 100, preMarketOpen: null },
+    { name: 'NIFTY FINANCIAL SERVICES', symbol: 'FINNIFTY', displayName: 'FIN NIFTY', lotSize: 65, strikeStep: 50, preMarketOpen: null },
+    { name: 'NIFTY MIDCAP SELECT', symbol: 'MIDCPNIFTY', displayName: 'MIDCAP NIFTY', lotSize: 120, strikeStep: 25, preMarketOpen: null },
+    { name: 'NIFTY NEXT 50', symbol: 'NIFTYNXT50', displayName: 'NIFTY NEXT 50', lotSize: 25, strikeStep: 100, preMarketOpen: null },
   ];
 
   for (const idx of standardIndices) {
     try {
       await db.query(
-        `INSERT INTO indices (name, symbol, display_name, lot_size, strike_step, is_active)
-         VALUES ($1, $2, $3, $4, $5, true)
+        `INSERT INTO indices (name, symbol, display_name, lot_size, strike_step, pre_market_open, is_active)
+         VALUES ($1, $2, $3, $4, $5, $6, true)
          ON CONFLICT (symbol) DO UPDATE SET
            display_name = EXCLUDED.display_name,
            lot_size = EXCLUDED.lot_size,
            strike_step = EXCLUDED.strike_step`,
-        [idx.name, idx.symbol, idx.displayName, idx.lotSize, idx.strikeStep]
+        [idx.name, idx.symbol, idx.displayName, idx.lotSize, idx.strikeStep, idx.preMarketOpen]
       );
     } catch (e) {
       console.warn(`Could not seed index ${idx.symbol}:`, e.message);
@@ -434,6 +449,165 @@ const initializeDatabase = async () => {
   }
 
   console.log('✅ PostgreSQL Database [optionchain] tables & indices initialized successfully');
+};
+
+/**
+ * Get pre-market open price for an index symbol.
+ * Pre-market session is 9:00 AM to 9:15 AM every trading day.
+ * Dynamically queries the first recorded price on opening time (between 09:00:00 and 09:15:59).
+ * If no tick in 9:00-9:15 today, checks earliest tick today (>= 09:00),
+ * or most recent trading day's opening price, or earliest available snapshot price.
+ * Never uses static hardcoded 23410.
+ *
+ * @param {string} symbol
+ * @returns {Promise<number|null>}
+ */
+const getPreMarketOpen = async (symbol) => {
+  const upper = symbol.toUpperCase();
+  const index = await getIndexBySymbol(upper);
+  if (!index) return null;
+
+  try {
+    // 1. Check if opening price was recorded in pre_market_data for today
+    const todayRes = await db.query(
+      `SELECT pre_market_open FROM pre_market_data
+       WHERE index_id = $1 AND trade_date = CURRENT_DATE
+       ORDER BY id DESC
+       LIMIT 1`,
+      [index.id]
+    );
+    if (todayRes.rows.length > 0 && todayRes.rows[0].pre_market_open) {
+      return parseFloat(todayRes.rows[0].pre_market_open);
+    }
+
+    // 2. Query underlying_prices for the first price between 9:00 AM and 9:15 AM today
+    const openTimeRes = await db.query(
+      `SELECT price, timestamp FROM underlying_prices
+       WHERE index_id = $1
+         AND timestamp::date = CURRENT_DATE
+         AND timestamp::time >= '09:00:00'
+         AND timestamp::time <= '09:15:59'
+       ORDER BY timestamp ASC
+       LIMIT 1`,
+      [index.id]
+    );
+    if (openTimeRes.rows.length > 0 && openTimeRes.rows[0].price) {
+      const openPrice = parseFloat(openTimeRes.rows[0].price);
+      await upsertPreMarketOpen(upper, openPrice);
+      return openPrice;
+    }
+
+    // 3. Check option_chain_snapshots for the first price between 9:00 AM and 9:15 AM today
+    const snapOpenRes = await db.query(
+      `SELECT underlying_price, timestamp FROM option_chain_snapshots
+       WHERE index_id = $1
+         AND timestamp::date = CURRENT_DATE
+         AND timestamp::time >= '09:00:00'
+         AND timestamp::time <= '09:15:59'
+       ORDER BY timestamp ASC
+       LIMIT 1`,
+      [index.id]
+    );
+    if (snapOpenRes.rows.length > 0 && snapOpenRes.rows[0].underlying_price) {
+      const openPrice = parseFloat(snapOpenRes.rows[0].underlying_price);
+      await upsertPreMarketOpen(upper, openPrice);
+      return openPrice;
+    }
+
+    // 4. Earliest tick today starting from 09:00:00
+    const earliestTodayRes = await db.query(
+      `SELECT price FROM underlying_prices
+       WHERE index_id = $1
+         AND timestamp::date = CURRENT_DATE
+         AND timestamp::time >= '09:00:00'
+       ORDER BY timestamp ASC
+       LIMIT 1`,
+      [index.id]
+    );
+    if (earliestTodayRes.rows.length > 0 && earliestTodayRes.rows[0].price) {
+      return parseFloat(earliestTodayRes.rows[0].price);
+    }
+
+    // 5. Check most recent trading day's opening price (9:00 - 9:15 AM)
+    const recentDayRes = await db.query(
+      `SELECT price FROM underlying_prices
+       WHERE index_id = $1
+         AND timestamp::time >= '09:00:00'
+         AND timestamp::time <= '09:15:59'
+       ORDER BY timestamp::date DESC, timestamp ASC
+       LIMIT 1`,
+      [index.id]
+    );
+    if (recentDayRes.rows.length > 0 && recentDayRes.rows[0].price) {
+      return parseFloat(recentDayRes.rows[0].price);
+    }
+
+    // 6. Check latest pre_market_data across any past date
+    const pastPreMarketRes = await db.query(
+      `SELECT pre_market_open FROM pre_market_data
+       WHERE index_id = $1
+       ORDER BY trade_date DESC, id DESC
+       LIMIT 1`,
+      [index.id]
+    );
+    if (pastPreMarketRes.rows.length > 0 && pastPreMarketRes.rows[0].pre_market_open) {
+      return parseFloat(pastPreMarketRes.rows[0].pre_market_open);
+    }
+
+    // 7. Earliest recorded underlying price
+    const fallbackRes = await db.query(
+      `SELECT price FROM underlying_prices
+       WHERE index_id = $1
+       ORDER BY timestamp ASC
+       LIMIT 1`,
+      [index.id]
+    );
+    if (fallbackRes.rows.length > 0 && fallbackRes.rows[0].price) {
+      return parseFloat(fallbackRes.rows[0].price);
+    }
+  } catch (e) {
+    console.warn('⚠️ Error in getPreMarketOpen:', e.message);
+  }
+
+  return null;
+};
+
+/**
+ * Upsert pre-market open price for an index symbol.
+ * @param {string} symbol
+ * @param {number} preMarketOpen
+ * @param {string} [tradeDate]
+ * @returns {Promise<Object|null>}
+ */
+const upsertPreMarketOpen = async (symbol, preMarketOpen, tradeDate = new Date().toISOString().slice(0, 10)) => {
+  const upper = symbol.toUpperCase();
+  const index = await getIndexBySymbol(upper);
+  if (!index) return null;
+
+  const price = parseFloat(preMarketOpen);
+  if (isNaN(price)) return null;
+
+  try {
+    await db.query(
+      `UPDATE indices SET pre_market_open = $1, updated_at = NOW() WHERE id = $2`,
+      [price, index.id]
+    );
+  } catch (e) {}
+
+  try {
+    const result = await db.query(
+      `INSERT INTO pre_market_data (index_id, pre_market_open, trade_date, timestamp)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (index_id, trade_date) DO UPDATE SET
+         pre_market_open = EXCLUDED.pre_market_open,
+         timestamp = NOW()
+       RETURNING id, index_id, pre_market_open, trade_date, timestamp`,
+      [index.id, price, tradeDate]
+    );
+    return result.rows[0];
+  } catch (e) {
+    return { index_id: index.id, pre_market_open: price, trade_date: tradeDate };
+  }
 };
 
 module.exports = {
@@ -453,4 +627,6 @@ module.exports = {
   getHistoricalUnderlyingPrices,
   getSnapshotCount,
   initializeDatabase,
+  getPreMarketOpen,
+  upsertPreMarketOpen,
 };

@@ -849,6 +849,7 @@ app.post('/api/option-chain/:symbol/refresh', async (req, res) => {
 app.get('/api/option-chain/:symbol/pcr-analysis', async (req, res) => {
   const { symbol } = req.params;
   const { selectedStrike, strikeRange, expiry } = req.query;
+  const upper = (symbol || 'NIFTY').toUpperCase();
 
   try {
     const chain = await getOptionChain(symbol, expiry);
@@ -928,6 +929,31 @@ app.get('/api/option-chain/:symbol/pcr-analysis', async (req, res) => {
       }
     }
 
+    let preOpen = req.query.preMarketOpen ? parseFloat(req.query.preMarketOpen) : null;
+    if (!preOpen || isNaN(preOpen)) {
+      preOpen = await models.getPreMarketOpen(upper);
+    }
+    if (!preOpen || isNaN(preOpen)) {
+      preOpen = chain.underlyingPrice || null;
+    }
+
+    let preAtm = sortedStrikes.find((s) => s >= preOpen);
+    if (preAtm === undefined) preAtm = sortedStrikes[sortedStrikes.length - 1];
+    let preAtmIdx = sortedStrikes.indexOf(preAtm);
+    const pStart = Math.max(0, preAtmIdx - range);
+    const pEnd = Math.min(sortedStrikes.length - 1, preAtmIdx + range);
+    const preSelectedStrikes = sortedStrikes.slice(pStart, pEnd + 1);
+
+    let pCallOI = 0, pPutOI = 0;
+    for (const sVal of preSelectedStrikes) {
+      const obj = strikes.find((s) => s.strikePrice === sVal);
+      if (obj) {
+        pCallOI += obj.ce?.oi || 0;
+        pPutOI += obj.pe?.oi || 0;
+      }
+    }
+    const preAvgPCR = pCallOI > 0 ? parseFloat((pPutOI / pCallOI).toFixed(2)) : 0;
+
     res.json({
       success: true,
       data: {
@@ -950,7 +976,129 @@ app.get('/api/option-chain/:symbol/pcr-analysis', async (req, res) => {
           sentiment,
           interpretation,
         },
+        preMarket: {
+          preMarketOpen: preOpen,
+          atmStrike: preAtm,
+          strikeRange: range,
+          selectedStrikes: preSelectedStrikes,
+          totalCallOI: pCallOI,
+          totalPutOI: pPutOI,
+          averagePCR: preAvgPCR,
+        },
       },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 8b. Dedicated Pre-Market Open ATM Average PCR Endpoint
+app.get('/api/option-chain/:symbol/pre-market-pcr', async (req, res) => {
+  const { symbol } = req.params;
+  const { preMarketOpen, strikeRange, expiry } = req.query;
+  const upper = (symbol || 'NIFTY').toUpperCase();
+  const range = parseInt(strikeRange, 10) || 3;
+
+  try {
+    let openPrice = preMarketOpen !== undefined && preMarketOpen !== '' ? parseFloat(preMarketOpen) : null;
+    if (openPrice === null || isNaN(openPrice)) {
+      openPrice = await models.getPreMarketOpen(upper);
+    }
+
+    const chain = await getOptionChain(symbol, expiry);
+    const strikes = chain.strikes || [];
+
+    if (openPrice === null || isNaN(openPrice) || openPrice <= 0) {
+      openPrice = chain.underlyingPrice || null;
+    }
+
+    if (!openPrice) {
+      return res.status(404).json({
+        success: false,
+        error: `No opening price or underlying price available for ${upper}`,
+      });
+    }
+
+    const indexRecord = await models.getIndexBySymbol(upper);
+    const step = indexRecord?.strike_step || (upper === 'BANKNIFTY' ? 100 : 50);
+
+    const sortedStrikes = strikes.map((s) => s.strikePrice).sort((a, b) => a - b);
+
+    // Rule: ATM strike is first strike >= openPrice (for 23,410 => 23,450)
+    let atmStrike = null;
+    if (sortedStrikes.length > 0) {
+      const match = sortedStrikes.find((s) => s >= openPrice);
+      atmStrike = match !== undefined ? match : sortedStrikes[sortedStrikes.length - 1];
+    } else {
+      atmStrike = Math.ceil(openPrice / step) * step;
+    }
+
+    let atmIdx = sortedStrikes.indexOf(atmStrike);
+    if (atmIdx === -1 && sortedStrikes.length > 0) {
+      atmStrike = sortedStrikes.reduce((closest, s) =>
+        Math.abs(s - atmStrike) < Math.abs(closest - atmStrike) ? s : closest,
+        sortedStrikes[0]
+      );
+      atmIdx = sortedStrikes.indexOf(atmStrike);
+    }
+
+    let selectedStrikes = [];
+    if (sortedStrikes.length > 0) {
+      const startIdx = Math.max(0, atmIdx - range);
+      const endIdx = Math.min(sortedStrikes.length - 1, atmIdx + range);
+      selectedStrikes = sortedStrikes.slice(startIdx, endIdx + 1);
+    } else {
+      for (let i = -range; i <= range; i++) {
+        selectedStrikes.push(atmStrike + i * step);
+      }
+    }
+
+    let totalCallOI = 0;
+    let totalPutOI = 0;
+
+    for (const strikeVal of selectedStrikes) {
+      const strikeObj = strikes.find((s) => s.strikePrice === strikeVal);
+      if (strikeObj) {
+        totalCallOI += strikeObj.ce?.oi || 0;
+        totalPutOI += strikeObj.pe?.oi || 0;
+      }
+    }
+
+    const averagePCR = totalCallOI > 0 ? parseFloat((totalPutOI / totalCallOI).toFixed(2)) : 0;
+
+    res.json({
+      success: true,
+      data: {
+        preMarketOpen: openPrice,
+        atmStrike,
+        strikeRange: range,
+        selectedStrikes,
+        totalCallOI,
+        totalPutOI,
+        averagePCR,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 8c. Save Pre-Market Open Price
+app.post('/api/option-chain/:symbol/pre-market-open', async (req, res) => {
+  const { symbol } = req.params;
+  const { preMarketOpen, tradeDate } = req.body;
+  const upper = (symbol || 'NIFTY').toUpperCase();
+
+  try {
+    if (preMarketOpen === undefined || isNaN(parseFloat(preMarketOpen))) {
+      return res.status(400).json({ success: false, error: 'preMarketOpen must be a valid number' });
+    }
+
+    const saved = await models.upsertPreMarketOpen(upper, parseFloat(preMarketOpen), tradeDate);
+    res.json({
+      success: true,
+      message: `Pre-market open price saved for ${upper}`,
+      data: saved,
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });

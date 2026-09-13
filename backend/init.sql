@@ -11,9 +11,21 @@ CREATE TABLE IF NOT EXISTS indices (
     display_name VARCHAR(100),
     lot_size INTEGER,
     strike_step INTEGER DEFAULT 50,
+    pre_market_open DECIMAL(12,2),
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Pre-market data: stores daily pre-market open prices
+CREATE TABLE IF NOT EXISTS pre_market_data (
+    id SERIAL PRIMARY KEY,
+    index_id INTEGER NOT NULL REFERENCES indices(id) ON DELETE CASCADE,
+    pre_market_open DECIMAL(12,2) NOT NULL,
+    trade_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    timestamp TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMP DEFAULT NOW(),
+    CONSTRAINT uq_index_trade_date UNIQUE (index_id, trade_date)
 );
 
 -- Underlying prices: tracks spot price of the index over time

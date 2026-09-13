@@ -22,6 +22,7 @@ import {
   ContractInfoResponse,
   NSEUnderlyingPriceResponse,
   LiveOptionChainResponse,
+  PreMarketPCRData,
 } from '../../models/option-chain.model';
 import { Subscription, interval } from 'rxjs';
 
@@ -72,6 +73,12 @@ export class OptionChainComponent implements OnInit, OnDestroy {
   autoRefreshEnabled = signal<boolean>(true);
   sortField = signal<string>('strikePrice');
   sortDirection = signal<'asc' | 'desc'>('asc');
+
+  // Pre-Market Open & ATM PCR Signals (null by default; queried dynamically from opening 9:00-9:15 AM)
+  preMarketOpen = signal<number | null>(null);
+  preMarketStrikeRange = signal<number>(3);
+  preMarketData = signal<PreMarketPCRData | null>(null);
+  isPreMarketLoading = signal<boolean>(false);
 
   // Column display controls (Option Greeks, Bid/Ask Quote Columns & PCR Analysis)
   showBidAsk = signal<boolean>(false);
@@ -759,6 +766,7 @@ export class OptionChainComponent implements OnInit, OnDestroy {
     this.loadIndices();
     this.loadStrikePrices();
     this.loadNSEUnderlyingPrice();
+    this.loadPreMarketPCR();
     // Load expiries first to get the nearest active expiry (e.g. 15-Sep-2026),
     // and then immediately send that expiry to backend on initial load.
     this.loadExpiries(() => {
@@ -956,6 +964,48 @@ export class OptionChainComponent implements OnInit, OnDestroy {
     });
   }
 
+  loadPreMarketPCR(): void {
+    this.isPreMarketLoading.set(true);
+    const sym = this.selectedSymbol();
+    const exp = this.selectedExpiry() || this.nearestExpiry() || undefined;
+    const pmOpen = this.preMarketOpen();
+    const range = this.preMarketStrikeRange();
+
+    this.optionChainService.getPreMarketPCR(sym, {
+      preMarketOpen: pmOpen || undefined,
+      strikeRange: range,
+      expiry: exp,
+    }).subscribe({
+      next: (response) => {
+        if (response?.data) {
+          this.preMarketData.set(response.data);
+          if (response.data.preMarketOpen) {
+            this.preMarketOpen.set(response.data.preMarketOpen);
+          }
+          if (response.data.strikeRange) {
+            this.preMarketStrikeRange.set(response.data.strikeRange);
+          }
+        }
+        this.isPreMarketLoading.set(false);
+      },
+      error: (err) => {
+        console.warn('Could not load pre-market PCR:', err);
+        this.isPreMarketLoading.set(false);
+      },
+    });
+  }
+
+  updatePreMarketOpen(newPrice: number): void {
+    if (!newPrice || isNaN(newPrice)) return;
+    this.preMarketOpen.set(newPrice);
+    this.loadPreMarketPCR();
+  }
+
+  updatePreMarketRange(range: number): void {
+    this.preMarketStrikeRange.set(range);
+    this.loadPreMarketPCR();
+  }
+
   refreshData(): void {
     this.isRefreshing.set(true);
     this.optionChainService.refreshOptionChain(this.selectedSymbol()).subscribe({
@@ -964,6 +1014,7 @@ export class OptionChainComponent implements OnInit, OnDestroy {
         this.loadStrikePrices();
         this.loadExpiries();
         this.loadNSEUnderlyingPrice();
+        this.loadPreMarketPCR();
         this.isRefreshing.set(false);
         this.snackBar.open('Option chain data refreshed', 'Close', { duration: 2500 });
       },
@@ -986,6 +1037,7 @@ export class OptionChainComponent implements OnInit, OnDestroy {
         this.loadStrikePrices();
         this.loadExpiries();
         this.loadNSEUnderlyingPrice();
+        this.loadPreMarketPCR();
       }
     });
   }
@@ -1003,8 +1055,10 @@ export class OptionChainComponent implements OnInit, OnDestroy {
     this.selectedSymbol.set(symbol);
     this.selectedExpiry.set(null);
     this.nearestExpiry.set(null);
+    this.preMarketOpen.set(null);
     this.loadStrikePrices();
     this.loadNSEUnderlyingPrice();
+    this.loadPreMarketPCR();
     this.loadExpiries(() => {
       this.loadOptionChain();
     });
@@ -1177,6 +1231,16 @@ export class OptionChainComponent implements OnInit, OnDestroy {
   isATMStrike(strikePrice: number): boolean {
     const atm = this.atmStrike();
     return atm !== null && strikePrice === atm;
+  }
+
+  isPreMarketATM(strikePrice: number): boolean {
+    const pmAtm = this.preMarketData()?.atmStrike;
+    return pmAtm !== undefined && strikePrice === pmAtm;
+  }
+
+  isPreMarketSelected(strikePrice: number): boolean {
+    const strikes = this.preMarketData()?.selectedStrikes;
+    return !!strikes && strikes.includes(strikePrice);
   }
 
   // Format integer with Indian numbering system (e.g. 10,716 or 12,02,368)

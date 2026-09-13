@@ -342,6 +342,7 @@ export interface StrikePCRAnalysisData {
   availableStrikes: number[];
   strikes: StrikePCRItem[];
   aggregate: AggregatePCR;
+  preMarket?: PreMarketPCRData;
 }
 
 /**
@@ -350,5 +351,26 @@ export interface StrikePCRAnalysisData {
 export interface StrikePCRAnalysisResponse {
   success: boolean;
   data: StrikePCRAnalysisData;
+}
+
+/**
+ * Pre-Market Open ATM Average PCR Data
+ */
+export interface PreMarketPCRData {
+  preMarketOpen: number;
+  atmStrike: number;
+  strikeRange: number;
+  selectedStrikes: number[];
+  totalCallOI: number;
+  totalPutOI: number;
+  averagePCR: number;
+}
+
+/**
+ * API Response for Pre-Market PCR Analysis
+ */
+export interface PreMarketPCRResponse {
+  success: boolean;
+  data: PreMarketPCRData;
 }
 
