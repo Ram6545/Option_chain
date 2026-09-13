@@ -6,6 +6,8 @@ const { URL } = require('url');
 const db = require('./config/db');
 const models = require('./models');
 
+
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -687,7 +689,7 @@ app.get('/api/strike-prices/:symbol/expiries', async (req, res) => {
       if (chain?.expiryDates && chain.expiryDates.length > 0) {
         expiries = chain.expiryDates;
       }
-    } catch (e) {}
+    } catch (e) { }
 
     if (!expiries || expiries.length === 0) {
       const contractInfo = await fetchNSEJson(`https://www.nseindia.com/api/option-chain-contract-info?symbol=${encodeURIComponent(upper)}`);
