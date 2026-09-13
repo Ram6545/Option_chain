@@ -374,3 +374,72 @@ export interface PreMarketPCRResponse {
   data: PreMarketPCRData;
 }
 
+/**
+ * Historical Option Chain Replay Interval Item
+ */
+export interface HistoricalReplayItem {
+  timestamp: string; // e.g. "09:15"
+  niftyPrice: number;
+  atmStrike: number;
+  pcr: number;
+  averagePCR: number;
+  totalCallOI: number;
+  totalPutOI: number;
+  optionChain: StrikeData[];
+}
+
+/**
+ * Historical Option Chain Replay Response
+ */
+export interface HistoricalReplayResponse {
+  success: boolean;
+  source?: string;
+  symbol: string;
+  date: string;
+  expiry?: string | null;
+  timeFrame: number;
+  startTime: string;
+  endTime: string;
+  totalIntervals: number;
+  data: HistoricalReplayItem[];
+}
+
+/**
+ * Expiry Cycle Details
+ */
+export interface ExpiryCycleData {
+  id: number;
+  index_id: number;
+  symbol: string;
+  cycle_start_date: string;
+  expiry_date: string;
+  expiryDateNSE?: string;
+  status: 'ACTIVE' | 'EXPIRED' | 'ARCHIVED';
+  is_current: boolean;
+  created_at: string;
+}
+
+export interface ExpiryCycleResponse {
+  success: boolean;
+  symbol: string;
+  activeCycle: ExpiryCycleData;
+  availableExpiries: string[];
+  nextCycleRule: string;
+}
+
+export interface HistoricalDatesResponse {
+  success: boolean;
+  symbol: string;
+  count: number;
+  data: string[];
+}
+
+export interface HistoricalExpiriesResponse {
+  success: boolean;
+  symbol: string;
+  date: string | null;
+  count: number;
+  data: string[];
+}
+
+

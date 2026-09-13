@@ -17,6 +17,10 @@ import {
   LiveOptionChainResponse,
   StrikePCRAnalysisResponse,
   PreMarketPCRResponse,
+  HistoricalReplayResponse,
+  ExpiryCycleResponse,
+  HistoricalDatesResponse,
+  HistoricalExpiriesResponse,
 } from '../models/option-chain.model';
 
 /**
@@ -313,4 +317,74 @@ export class OptionChainService {
       tradeDate,
     });
   }
+
+  /**
+   * Get Historical Option Chain Replay data.
+   * @param symbol - Index symbol (e.g. 'NIFTY')
+   * @param options - Query parameters: date, expiry, startTime, endTime, timeFrame, strikeRange
+   */
+  getHistoricalReplay(
+    symbol: string,
+    options?: {
+      date?: string;
+      expiry?: string;
+      startTime?: string;
+      endTime?: string;
+      timeFrame?: number;
+      strikeRange?: number;
+    }
+  ): Observable<HistoricalReplayResponse> {
+    const queryParams: string[] = [];
+    if (options?.date) {
+      queryParams.push(`date=${encodeURIComponent(options.date)}`);
+    }
+    if (options?.expiry) {
+      queryParams.push(`expiry=${encodeURIComponent(options.expiry)}`);
+    }
+    if (options?.startTime) {
+      queryParams.push(`startTime=${encodeURIComponent(options.startTime)}`);
+    }
+    if (options?.endTime) {
+      queryParams.push(`endTime=${encodeURIComponent(options.endTime)}`);
+    }
+    if (options?.timeFrame) {
+      queryParams.push(`timeFrame=${options.timeFrame}`);
+    }
+    if (options?.strikeRange) {
+      queryParams.push(`strikeRange=${options.strikeRange}`);
+    }
+    const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
+    return this.http.get<HistoricalReplayResponse>(
+      `${this.apiUrl}/option-chain/${symbol}/historical${queryString}`
+    );
+  }
+
+  /**
+   * Get Active Expiry Cycle for an index (e.g. Tuesday expiry, Wednesday new cycle).
+   * @param symbol - Index symbol (default 'NIFTY')
+   */
+  getActiveExpiryCycle(symbol: string = 'NIFTY'): Observable<ExpiryCycleResponse> {
+    return this.http.get<ExpiryCycleResponse>(`${this.apiUrl}/option-chain/${symbol}/expiry`);
+  }
+
+  /**
+   * Get distinct recorded historical trading dates from PostgreSQL.
+   * @param symbol - Index symbol (default 'NIFTY')
+   */
+  getHistoricalDates(symbol: string = 'NIFTY'): Observable<HistoricalDatesResponse> {
+    return this.http.get<HistoricalDatesResponse>(`${this.apiUrl}/option-chain/${symbol}/history/dates`);
+  }
+
+  /**
+   * Get distinct recorded historical expiry dates from PostgreSQL.
+   * @param symbol - Index symbol (default 'NIFTY')
+   * @param date - Optional trading date filter
+   */
+  getHistoricalExpiries(symbol: string = 'NIFTY', date?: string): Observable<HistoricalExpiriesResponse> {
+    const query = date ? `?date=${encodeURIComponent(date)}` : '';
+    return this.http.get<HistoricalExpiriesResponse>(
+      `${this.apiUrl}/option-chain/${symbol}/history/expiries${query}`
+    );
+  }
 }
+

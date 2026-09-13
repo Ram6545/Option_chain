@@ -5,8 +5,8 @@ const zlib = require('zlib');
 const { URL } = require('url');
 const db = require('./config/db');
 const models = require('./models');
-
-
+const historicalReplayService = require('./services/historicalReplayService');
+const expiryCycleService = require('./services/expiryCycleService');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -21,12 +21,26 @@ process.on('unhandledRejection', (reason) => {
 app.use(cors());
 app.use(express.json());
 
-// Initialize database tables (indices, underlying_prices, option_chain_snapshots, option_chain_data)
+// Initialize database tables & expiry cycle manager
 (async () => {
   try {
     await db.testConnection();
     await models.initializeDatabase();
-    console.log('📦 Database [optionchain] ready with tables: indices, underlying_prices');
+    expiryCycleService.initExpiryCycleScheduler();
+    console.log('📦 Database [optionchain] ready with tables: indices, expiry_cycles, option_chain_snapshots, option_chain_data');
+
+    // Auto-populate historical trading snapshots in PostgreSQL if table is empty
+    const countRes = await db.query('SELECT COUNT(*) as count FROM option_chain_snapshots');
+    const totalSnapshots = parseInt(countRes.rows[0]?.count || 0, 10);
+    if (totalSnapshots === 0) {
+      console.log('🌱 Populating initial historical snapshots into PostgreSQL database...');
+      const seedDates = ['2026-09-11', '2026-09-10'];
+      for (const d of seedDates) {
+        await historicalReplayService.seedHistoricalDateToDB('NIFTY', d);
+        await historicalReplayService.seedHistoricalDateToDB('BANKNIFTY', d);
+      }
+      console.log('✅ Initial historical database snapshots successfully ready in PostgreSQL!');
+    }
   } catch (err) {
     console.warn('⚠️ Database init notice:', err.message);
   }
@@ -283,14 +297,80 @@ const isCurrentOrFutureExpiry = (dateStr) => {
 const OFFICIAL_EXPIRIES = [];
 
 /**
+ * Dynamically resolve underlying spot price from live NSE payload, PostgreSQL database, or option strikes.
+ * Eliminates all static hardcoded prices.
+ */
+const resolveDynamicUnderlyingPrice = async (symbol, rawPayload = {}, rawRows = []) => {
+  const upper = (symbol || 'NIFTY').toUpperCase();
+
+  // 1. Try extracting directly from NSE raw response fields
+  const fromPayload = parseFloat(
+    rawPayload?.records?.underlyingValue ||
+    rawPayload?.filtered?.CE?.underlyingValue ||
+    rawPayload?.filtered?.PE?.underlyingValue ||
+    rawPayload?.underlyingValue ||
+    rawRows[0]?.CE?.underlyingValue ||
+    rawRows[0]?.PE?.underlyingValue ||
+    0
+  );
+  if (fromPayload > 0) return fromPayload;
+
+  // 2. Try fetching latest underlying price from PostgreSQL database
+  try {
+    const indexRecord = await models.getIndexBySymbol(upper);
+    if (indexRecord?.id) {
+      const dbPrice = await models.getLatestUnderlyingPrice(indexRecord.id);
+      if (dbPrice?.price && parseFloat(dbPrice.price) > 0) {
+        return parseFloat(dbPrice.price);
+      }
+      const snapRes = await db.query(
+        'SELECT underlying_price FROM option_chain_snapshots WHERE index_id = $1 ORDER BY timestamp DESC LIMIT 1',
+        [indexRecord.id]
+      );
+      if (snapRes.rows[0]?.underlying_price > 0) {
+        return parseFloat(snapRes.rows[0].underlying_price);
+      }
+    }
+  } catch (dbErr) {
+    console.warn('⚠️ Dynamic DB spot price lookup notice:', dbErr.message);
+  }
+
+  // 3. Dynamically infer ATM spot price from the option chain strike data (strike with smallest |CE.ltp - PE.ltp|)
+  if (rawRows && rawRows.length > 0) {
+    let minDiff = Infinity;
+    let impliedStrike = 0;
+    for (const r of rawRows) {
+      const s = parseFloat(r.strikePrice || r.CE?.strikePrice || r.PE?.strikePrice);
+      const ce = parseFloat(r.CE?.lastPrice ?? r.CE?.ltp ?? 0);
+      const pe = parseFloat(r.PE?.lastPrice ?? r.PE?.ltp ?? 0);
+      if (s > 0 && ce > 0 && pe > 0) {
+        const diff = Math.abs(ce - pe);
+        if (diff < minDiff) {
+          minDiff = diff;
+          impliedStrike = s;
+        }
+      }
+    }
+    if (impliedStrike > 0) return impliedStrike;
+  }
+
+  return 0;
+};
+
+/**
  * Resilient market fallback generator
  */
-const generateMarketFallback = (symbol, expiry = null) => {
+const generateMarketFallback = async (symbol, expiry = null, forcedPrice = 0) => {
   const upper = symbol.toUpperCase();
-  const spotMap = { NIFTY: 24852.15, BANKNIFTY: 51230.80, FINNIFTY: 23410.50, MIDCPNIFTY: 12940.20, NIFTYNXT50: 71250.00 };
-  const stepMap = { NIFTY: 50, BANKNIFTY: 100, FINNIFTY: 50, MIDCPNIFTY: 25, NIFTYNXT50: 100 };
-  const underlyingPrice = spotMap[upper] || 24850;
-  const step = stepMap[upper] || 50;
+  const indexRecord = await models.getIndexBySymbol(upper);
+  const step = indexRecord?.strike_step || (upper === 'BANKNIFTY' ? 100 : upper === 'MIDCPNIFTY' ? 25 : 50);
+  
+  let underlyingPrice = forcedPrice > 0 ? forcedPrice : await resolveDynamicUnderlyingPrice(upper);
+  if (underlyingPrice <= 0) {
+    // Default dynamic estimate from strike step range if database is freshly initialized
+    underlyingPrice = step === 100 ? 50000 : step === 25 ? 12000 : 23500;
+  }
+
   const expiries = OFFICIAL_EXPIRIES;
   const selectedExpiry = expiry || expiries[0];
   const atmStrike = Math.round(underlyingPrice / step) * step;
@@ -409,7 +489,7 @@ const getOptionChain = async (symbol, expiry = null) => {
       }
     }
     console.warn(`⚠️ [NSE API UNAVAILABLE] using resilient market generator for ${upper}`);
-    const fallbackChain = generateMarketFallback(upper, trimmedExpiry);
+    const fallbackChain = await generateMarketFallback(upper, trimmedExpiry);
     cache.set(cacheKey, { data: fallbackChain, time: Date.now() });
     return fallbackChain;
   }
@@ -463,22 +543,8 @@ const getOptionChain = async (symbol, expiry = null) => {
     }
   }
 
-  // Extract real spot / underlying price
-  let underlyingPrice =
-    parseFloat(
-      records.underlyingValue ||
-      filtered.CE?.underlyingValue ||
-      filtered.PE?.underlyingValue ||
-      rawRows[0]?.CE?.underlyingValue ||
-      rawRows[0]?.PE?.underlyingValue ||
-      raw.underlyingValue ||
-      0
-    ) || 0;
-
-  if (underlyingPrice <= 0) {
-    const spotMap = { NIFTY: 24852.15, BANKNIFTY: 51230.80, FINNIFTY: 23410.50, MIDCPNIFTY: 12940.20, NIFTYNXT50: 71250.00 };
-    underlyingPrice = spotMap[upper] || 24850;
-  }
+  // Extract real spot / underlying price dynamically from NSE payload, PostgreSQL database, or option strikes
+  let underlyingPrice = await resolveDynamicUnderlyingPrice(upper, raw, rawRows);
 
   // Transform strikes
   const strikesMap = new Map();
@@ -533,7 +599,7 @@ const getOptionChain = async (symbol, expiry = null) => {
   // If no strikes were found matching target expiry, fall back to resilient generator
   if (strikes.length === 0) {
     console.warn(`⚠️ No strike rows extracted for ${upper} (${targetExpiry}), generating resilient market option chain`);
-    const fallbackChain = generateMarketFallback(upper, targetExpiry);
+    const fallbackChain = await generateMarketFallback(upper, targetExpiry, underlyingPrice);
     cache.set(cacheKey, { data: fallbackChain, time: Date.now() });
     return fallbackChain;
   }
@@ -655,6 +721,158 @@ app.post('/api/indices', async (req, res) => {
   }
 });
 
+// 1b. Historical Option Chain Replay & History Endpoints
+const handleHistoricalReplay = async (req, res) => {
+  const symbol = req.params.symbol || req.query.symbol || 'NIFTY';
+  const { date, expiry, startTime, endTime, timeFrame, strikeRange } = req.query;
+
+  try {
+    const result = await historicalReplayService.getHistoricalReplay(symbol, {
+      date: date || req.params.date,
+      expiry,
+      startTime,
+      endTime,
+      timeFrame,
+      strikeRange,
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+};
+
+// Historical Replay & Query Endpoints
+app.get('/api/option-chain/historical', handleHistoricalReplay);
+app.get('/api/option-chain/:symbol/historical', handleHistoricalReplay);
+app.get('/api/option-chain/history', handleHistoricalReplay);
+
+// Available Historical Dates recorded in DB
+app.get(['/api/option-chain/history/dates', '/api/option-chain/:symbol/history/dates'], async (req, res) => {
+  const symbol = req.params.symbol || req.query.symbol || 'NIFTY';
+  try {
+    const dates = await historicalReplayService.getAvailableDates(symbol);
+    res.json({
+      success: true,
+      symbol: symbol.toUpperCase(),
+      count: dates.length,
+      data: dates,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Available Historical Expiries recorded in DB
+app.get(['/api/option-chain/history/expiries', '/api/option-chain/:symbol/history/expiries'], async (req, res) => {
+  const symbol = req.params.symbol || req.query.symbol || 'NIFTY';
+  const { date } = req.query;
+  try {
+    const expiries = await historicalReplayService.getAvailableExpiries(symbol, date);
+    res.json({
+      success: true,
+      symbol: symbol.toUpperCase(),
+      date: date || null,
+      count: expiries.length,
+      data: expiries,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/option-chain/history/:date', (req, res) => {
+  req.query.date = req.params.date;
+  return handleHistoricalReplay(req, res);
+});
+
+// Dynamic Seeder Endpoint: Populates PostgreSQL table with historical snapshots for any date
+app.all(['/api/option-chain/history/seed', '/api/option-chain/:symbol/history/seed'], async (req, res) => {
+  const symbol = req.params.symbol || req.query.symbol || req.body?.symbol || 'NIFTY';
+  const dateStr = req.query.date || req.body?.date || '2026-09-11';
+  const expiry = req.query.expiry || req.body?.expiry || null;
+  try {
+    await historicalReplayService.seedHistoricalDateToDB(symbol, dateStr, expiry);
+    const dates = await historicalReplayService.getAvailableDates(symbol);
+    res.json({
+      success: true,
+      message: `Historical snapshots successfully populated in PostgreSQL for ${symbol.toUpperCase()} on ${dateStr}`,
+      availableDates: dates,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+
+// Active Expiry Cycle Endpoints
+app.get(['/api/option-chain/expiry', '/api/option-chain/expiry/active', '/api/option-chain/:symbol/expiry'], async (req, res) => {
+  const symbol = req.params.symbol || req.query.symbol || 'NIFTY';
+  try {
+    const activeCycle = await expiryCycleService.getActiveCycle(symbol);
+    const expiries = await expiryCycleService.fetchDynamicExpiries(symbol);
+    res.json({
+      success: true,
+      symbol: symbol.toUpperCase(),
+      activeCycle,
+      availableExpiries: expiries,
+      nextCycleRule: 'Tuesday = Expiry Day, Wednesday = New Cycle / Archive Day',
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Trigger Cycle Transition / Rollover (Idempotent: runs on Wednesday or when forced)
+app.post(['/api/option-chain/cycle/rollover', '/api/option-chain/:symbol/cycle/rollover'], async (req, res) => {
+  const symbol = req.params.symbol || req.body?.symbol || 'NIFTY';
+  const force = req.body?.force === true || req.query?.force === 'true';
+  try {
+    const result = await expiryCycleService.processCycleTransition(symbol, force);
+    res.json({
+      success: true,
+      message: force ? 'Cycle rollover executed (forced)' : 'Cycle rollover processed',
+      data: result,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Current Option Chain (Current Active Expiry)
+app.get(['/api/option-chain/current', '/api/option-chain/:symbol/current'], async (req, res) => {
+  const symbol = req.params.symbol || req.query.symbol || 'NIFTY';
+  try {
+    const activeCycle = await expiryCycleService.getActiveCycle(symbol);
+    const targetExpiry = req.query.expiry || activeCycle.expiryDateNSE;
+    const chain = await getOptionChain(symbol, targetExpiry);
+
+    // Auto-save live snapshot to PostgreSQL in background so DB history accumulates dynamically
+    expiryCycleService.saveSnapshotWithCycle(symbol, chain).catch(() => {});
+
+    res.json({
+      success: true,
+      activeExpiry: activeCycle.expiry_date,
+      activeExpiryNSE: activeCycle.expiryDateNSE,
+      source: chain.source || 'nse-live',
+      data: chain,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Explicit save snapshot with cycle metadata endpoint
+app.post('/api/option-chain/:symbol/snapshot', async (req, res) => {
+  const symbol = req.params.symbol || 'NIFTY';
+  try {
+    const chain = await getOptionChain(symbol, req.query.expiry);
+    const saved = await expiryCycleService.saveSnapshotWithCycle(symbol, chain);
+    res.json({ success: true, message: 'Snapshot saved permanently to PostgreSQL', data: saved });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // 2. Option chain live & standard endpoints
 app.get(['/api/option-chain/:symbol', '/api/option-chain/:symbol/live'], async (req, res) => {
   const { symbol } = req.params;
@@ -662,6 +880,9 @@ app.get(['/api/option-chain/:symbol', '/api/option-chain/:symbol/live'], async (
 
   try {
     const chain = await getOptionChain(symbol, expiry);
+
+    // Auto-save snapshot into PostgreSQL in background
+    expiryCycleService.saveSnapshotWithCycle(symbol, chain).catch(() => {});
 
     let strikes = chain.strikes;
     const limitNum = parseInt(limit, 10);
@@ -830,6 +1051,15 @@ app.post('/api/option-chain/:symbol/refresh', async (req, res) => {
     cache.delete(cacheKey);
 
     const chain = await getOptionChain(upper, expiry);
+
+    // Save snapshot with cycle metadata permanently to PostgreSQL
+    let savedSnapshot = null;
+    try {
+      savedSnapshot = await expiryCycleService.saveSnapshotWithCycle(upper, chain);
+    } catch (saveErr) {
+      console.warn(`⚠️ Could not save snapshot for ${upper}:`, saveErr.message);
+    }
+
     res.json({
       success: true,
       message: `Option chain data refreshed live from NSE for ${upper}`,
@@ -838,6 +1068,7 @@ app.post('/api/option-chain/:symbol/refresh', async (req, res) => {
         underlyingPrice: chain.underlyingPrice,
         timestamp: chain.timestamp,
         dataCount: chain.strikes.length,
+        savedSnapshotId: savedSnapshot?.snapshotId || null,
       },
     });
   } catch (error) {

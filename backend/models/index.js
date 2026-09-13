@@ -136,12 +136,34 @@ const getLatestUnderlyingPrice = async (indexId) => {
  * @returns {Promise<Object>}
  */
 const createSnapshot = async (snapshotData) => {
-  const { indexId, underlyingPrice, timestamp } = snapshotData;
+  const {
+    indexId,
+    underlyingPrice,
+    timestamp = new Date(),
+    tradingDate = new Date().toISOString().slice(0, 10),
+    expiryDate = null,
+    status = 'ACTIVE',
+    isActiveCycle = true,
+    atmStrike = null,
+    pcr = null,
+  } = snapshotData;
+
   const result = await db.query(
-    `INSERT INTO option_chain_snapshots (index_id, underlying_price, timestamp)
-     VALUES ($1, $2, $3)
-     RETURNING id, index_id, underlying_price, timestamp, created_at`,
-    [indexId, underlyingPrice, timestamp || new Date()]
+    `INSERT INTO option_chain_snapshots 
+      (index_id, underlying_price, timestamp, trading_date, expiry_date, status, is_active_cycle, atm_strike, pcr)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     RETURNING id, index_id, underlying_price, timestamp, trading_date, expiry_date, status, is_active_cycle, atm_strike, pcr, created_at`,
+    [
+      indexId,
+      underlyingPrice,
+      timestamp,
+      tradingDate,
+      expiryDate,
+      status,
+      isActiveCycle,
+      atmStrike,
+      pcr,
+    ]
   );
   return result.rows[0];
 };
@@ -377,18 +399,50 @@ const initializeDatabase = async () => {
     );
   `);
 
-  // 3. Table: option_chain_snapshots
+  // 3. Table: expiry_cycles
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS expiry_cycles (
+      id SERIAL PRIMARY KEY,
+      index_id INTEGER NOT NULL REFERENCES indices(id) ON DELETE CASCADE,
+      symbol VARCHAR(20) NOT NULL,
+      cycle_start_date DATE NOT NULL,
+      expiry_date DATE NOT NULL,
+      status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+      is_current BOOLEAN DEFAULT true,
+      created_at TIMESTAMP DEFAULT NOW(),
+      closed_at TIMESTAMP,
+      CONSTRAINT uq_index_cycle_expiry UNIQUE (index_id, expiry_date)
+    );
+  `);
+
+  // 4. Table: option_chain_snapshots
   await db.query(`
     CREATE TABLE IF NOT EXISTS option_chain_snapshots (
       id SERIAL PRIMARY KEY,
       index_id INTEGER NOT NULL REFERENCES indices(id) ON DELETE CASCADE,
       underlying_price DECIMAL(12,2) NOT NULL,
+      trading_date DATE NOT NULL DEFAULT CURRENT_DATE,
+      expiry_date DATE,
+      status VARCHAR(20) DEFAULT 'ACTIVE',
+      is_active_cycle BOOLEAN DEFAULT true,
+      atm_strike DECIMAL(12,2),
+      pcr DECIMAL(6,2),
       timestamp TIMESTAMP DEFAULT NOW(),
       created_at TIMESTAMP DEFAULT NOW()
     );
   `);
 
-  // 4. Table: option_chain_data
+  // Migration: ensure new columns exist on option_chain_snapshots
+  try {
+    await db.query(`ALTER TABLE option_chain_snapshots ADD COLUMN IF NOT EXISTS trading_date DATE NOT NULL DEFAULT CURRENT_DATE;`);
+    await db.query(`ALTER TABLE option_chain_snapshots ADD COLUMN IF NOT EXISTS expiry_date DATE;`);
+    await db.query(`ALTER TABLE option_chain_snapshots ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'ACTIVE';`);
+    await db.query(`ALTER TABLE option_chain_snapshots ADD COLUMN IF NOT EXISTS is_active_cycle BOOLEAN DEFAULT TRUE;`);
+    await db.query(`ALTER TABLE option_chain_snapshots ADD COLUMN IF NOT EXISTS atm_strike DECIMAL(12,2);`);
+    await db.query(`ALTER TABLE option_chain_snapshots ADD COLUMN IF NOT EXISTS pcr DECIMAL(6,2);`);
+  } catch (e) {}
+
+  // 5. Table: option_chain_data
   await db.query(`
     CREATE TABLE IF NOT EXISTS option_chain_data (
       id SERIAL PRIMARY KEY,
@@ -411,13 +465,17 @@ const initializeDatabase = async () => {
     );
   `);
 
-  // 5. Indexes
+  // 6. Indexes for high performance & historical replay
   try {
     await db.query(`CREATE INDEX IF NOT EXISTS idx_option_chain_data_snapshot ON option_chain_data(snapshot_id);`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_option_chain_data_strike ON option_chain_data(strike_price);`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_option_chain_data_type ON option_chain_data(option_type);`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_chain_data_snapshot_strike ON option_chain_data(snapshot_id, strike_price ASC, option_type);`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_snapshots_index ON option_chain_snapshots(index_id);`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_snapshots_timestamp ON option_chain_snapshots(timestamp DESC);`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_snapshots_date_expiry_time ON option_chain_snapshots(index_id, trading_date, expiry_date, timestamp ASC);`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_snapshots_active_cycle ON option_chain_snapshots(index_id, is_active_cycle) WHERE is_active_cycle = TRUE;`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_expiry_cycles_status ON expiry_cycles(index_id, status, is_current);`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_underlying_index ON underlying_prices(index_id);`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_underlying_timestamp ON underlying_prices(timestamp DESC);`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_pre_market_index ON pre_market_data(index_id);`);
@@ -610,6 +668,212 @@ const upsertPreMarketOpen = async (symbol, preMarketOpen, tradeDate = new Date()
   }
 };
 
+/**
+ * Query historical snapshots and their option chain data for a given index, date, expiry, and time range.
+ * Fully supports 1m, 3m, 5m replay intervals and expiry cycle filtering.
+ *
+ * @param {number} indexId
+ * @param {string} dateStr - 'YYYY-MM-DD'
+ * @param {string|null} [expiryDate] - optional expiry date 'YYYY-MM-DD'
+ * @param {string} [startTime='09:15']
+ * @param {string} [endTime='15:30']
+ * @returns {Promise<Array>} Array of snapshots with nested options array
+ */
+const getHistoricalSnapshotsByRange = async (
+  indexId,
+  dateStr,
+  expiryDate = null,
+  startTime = '09:15',
+  endTime = '15:30'
+) => {
+  try {
+    const params = [indexId, dateStr];
+    let expiryFilter = '';
+
+    if (expiryDate) {
+      params.push(expiryDate);
+      expiryFilter = `AND (s.expiry_date = $${params.length}::date OR s.expiry_date IS NULL)`;
+    }
+
+    const query = `
+      SELECT 
+        s.id, 
+        s.index_id, 
+        s.underlying_price, 
+        s.timestamp,
+        s.trading_date,
+        s.expiry_date,
+        s.status,
+        s.pcr,
+        s.atm_strike,
+        json_agg(
+          json_build_object(
+            'strike_price', d.strike_price,
+            'option_type', d.option_type,
+            'ltp', d.ltp,
+            'change', d.change,
+            'oi', d.oi,
+            'change_oi', d.change_oi,
+            'volume', d.volume,
+            'iv', d.iv,
+            'bid_price', d.bid_price,
+            'bid_qty', d.bid_qty,
+            'ask_price', d.ask_price,
+            'ask_qty', d.ask_qty
+          )
+        ) AS options
+      FROM option_chain_snapshots s
+      LEFT JOIN option_chain_data d ON d.snapshot_id = s.id
+      WHERE s.index_id = $1
+        AND (s.trading_date = $2::date OR s.timestamp::date = $2::date)
+        ${expiryFilter}
+      GROUP BY s.id, s.index_id, s.underlying_price, s.timestamp, s.trading_date, s.expiry_date, s.status, s.pcr, s.atm_strike
+      ORDER BY s.timestamp ASC;
+    `;
+
+    const result = await db.query(query, params);
+    return result.rows;
+  } catch (err) {
+    console.warn('⚠️ getHistoricalSnapshotsByRange error:', err.message);
+    return [];
+  }
+};
+
+/**
+ * Get distinct available historical trading dates recorded in option_chain_snapshots.
+ * @param {number} indexId
+ * @returns {Promise<Array<string>>}
+ */
+const getAvailableHistoricalDates = async (indexId) => {
+  try {
+    const result = await db.query(
+      `SELECT DISTINCT COALESCE(trading_date, timestamp::date)::text as date
+       FROM option_chain_snapshots
+       WHERE index_id = $1
+       ORDER BY date DESC`,
+      [indexId]
+    );
+    return result.rows.map((r) => r.date);
+  } catch (err) {
+    console.warn('⚠️ getAvailableHistoricalDates error:', err.message);
+    return [];
+  }
+};
+
+/**
+ * Get distinct available historical expiry dates recorded in option_chain_snapshots.
+ * @param {number} indexId
+ * @param {string} [dateStr] - optional trading date filter
+ * @returns {Promise<Array<string>>}
+ */
+const getAvailableHistoricalExpiries = async (indexId, dateStr = null) => {
+  try {
+    let query = `
+      SELECT DISTINCT expiry_date::text as expiry
+      FROM option_chain_snapshots
+      WHERE index_id = $1 AND expiry_date IS NOT NULL
+    `;
+    const params = [indexId];
+    if (dateStr) {
+      query += ` AND (trading_date = $2::date OR timestamp::date = $2::date)`;
+      params.push(dateStr);
+    }
+    query += ` ORDER BY expiry DESC`;
+
+    const result = await db.query(query, params);
+    return result.rows.map((r) => r.expiry);
+  } catch (err) {
+    console.warn('⚠️ getAvailableHistoricalExpiries error:', err.message);
+    return [];
+  }
+};
+
+/**
+ * Get active expiry cycle for a symbol.
+ * @param {string} symbol
+ * @returns {Promise<Object|null>}
+ */
+const getActiveExpiryCycle = async (symbol) => {
+  const upper = symbol.toUpperCase();
+  const result = await db.query(
+    `SELECT c.id, c.index_id, c.symbol, c.cycle_start_date, c.expiry_date, c.status, c.is_current, c.created_at
+     FROM expiry_cycles c
+     WHERE c.symbol = $1 AND c.is_current = true
+     ORDER BY c.expiry_date ASC
+     LIMIT 1`,
+    [upper]
+  );
+  return result.rows[0] || null;
+};
+
+/**
+ * Upsert expiry cycle record.
+ * @param {Object} cycleData
+ * @returns {Promise<Object>}
+ */
+const upsertExpiryCycle = async ({ symbol, cycleStartDate, expiryDate, status = 'ACTIVE', isCurrent = true }) => {
+  const upper = symbol.toUpperCase();
+  const index = await getIndexBySymbol(upper);
+  if (!index) throw new Error(`Index not found: ${upper}`);
+
+  // If this cycle is marked isCurrent, reset previous active cycles
+  if (isCurrent) {
+    await db.query(
+      `UPDATE expiry_cycles SET is_current = false WHERE index_id = $1 AND expiry_date != $2::date`,
+      [index.id, expiryDate]
+    );
+  }
+
+  const result = await db.query(
+    `INSERT INTO expiry_cycles (index_id, symbol, cycle_start_date, expiry_date, status, is_current)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (index_id, expiry_date) DO UPDATE SET
+       status = EXCLUDED.status,
+       is_current = EXCLUDED.is_current,
+       cycle_start_date = EXCLUDED.cycle_start_date
+     RETURNING id, index_id, symbol, cycle_start_date, expiry_date, status, is_current, created_at`,
+    [index.id, upper, cycleStartDate, expiryDate, status, isCurrent]
+  );
+  return result.rows[0];
+};
+
+/**
+ * Archive expired cycles up to completedExpiryDate.
+ * Sets status='EXPIRED', is_current=false in expiry_cycles,
+ * and sets status='EXPIRED', is_active_cycle=false in option_chain_snapshots.
+ * NEVER DELETES HISTORICAL ROWS.
+ *
+ * @param {string} symbol
+ * @param {string} completedExpiryDate - 'YYYY-MM-DD'
+ * @returns {Promise<Object>}
+ */
+const archiveExpiredCycles = async (symbol, completedExpiryDate) => {
+  const upper = symbol.toUpperCase();
+  const index = await getIndexBySymbol(upper);
+  if (!index) return { archivedCycles: 0, updatedSnapshots: 0 };
+
+  const cycleRes = await db.query(
+    `UPDATE expiry_cycles
+     SET status = 'EXPIRED', is_current = false, closed_at = NOW()
+     WHERE index_id = $1 AND expiry_date <= $2::date AND status != 'EXPIRED'
+     RETURNING id`,
+    [index.id, completedExpiryDate]
+  );
+
+  const snapRes = await db.query(
+    `UPDATE option_chain_snapshots
+     SET status = 'EXPIRED', is_active_cycle = false
+     WHERE index_id = $1 AND expiry_date <= $2::date AND (status != 'EXPIRED' OR is_active_cycle = true)
+     RETURNING id`,
+    [index.id, completedExpiryDate]
+  );
+
+  return {
+    archivedCycles: cycleRes.rowCount,
+    updatedSnapshots: snapRes.rowCount,
+  };
+};
+
 module.exports = {
   getIndices,
   getIndexBySymbol,
@@ -629,4 +893,10 @@ module.exports = {
   initializeDatabase,
   getPreMarketOpen,
   upsertPreMarketOpen,
+  getHistoricalSnapshotsByRange,
+  getAvailableHistoricalDates,
+  getAvailableHistoricalExpiries,
+  getActiveExpiryCycle,
+  upsertExpiryCycle,
+  archiveExpiredCycles,
 };

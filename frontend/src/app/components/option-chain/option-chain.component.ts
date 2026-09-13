@@ -118,9 +118,26 @@ export class OptionChainComponent implements OnInit, OnDestroy {
     const data = this.optionChainData();
     const livePrice = data?.underlyingPrice || this.nseUnderlyingPrice();
     if (livePrice && livePrice > 0) return livePrice;
-    const sym = this.selectedSymbol();
-    const spotMap: { [key: string]: number } = { NIFTY: 24852.15, BANKNIFTY: 51230.80, FINNIFTY: 23410.50, MIDCPNIFTY: 12940.20, NIFTYNXT50: 71250.00 };
-    return spotMap[sym] || 24850;
+
+    // Dynamically derive spot price from option chain strikes if available
+    const strikes = data?.strikes || [];
+    if (strikes.length > 0) {
+      let minDiff = Infinity;
+      let impliedStrike = 0;
+      for (const s of strikes) {
+        if (s.strikePrice && s.ce?.ltp && s.pe?.ltp) {
+          const diff = Math.abs(s.ce.ltp - s.pe.ltp);
+          if (diff < minDiff) {
+            minDiff = diff;
+            impliedStrike = s.strikePrice;
+          }
+        }
+      }
+      if (impliedStrike > 0) return impliedStrike;
+      return strikes[Math.floor(strikes.length / 2)].strikePrice || 0;
+    }
+
+    return 0;
   });
 
   // Computed: symbol

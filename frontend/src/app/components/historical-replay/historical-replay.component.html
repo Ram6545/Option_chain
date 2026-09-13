@@ -1,0 +1,542 @@
+<div class="historical-replay-container">
+  <!-- Disclaimer & Historical Banner -->
+  <div class="replay-watermark-banner">
+    <div class="banner-left">
+      <div class="replay-badge">
+        <span class="pulsing-record-dot" [class.live-pulse]="isPlaying()"></span>
+        <span class="badge-title">HISTORICAL REPLAY</span>
+      </div>
+      <div class="banner-notice">
+        <mat-icon class="notice-icon">storage</mat-icon>
+        <span>Historical recorded market playback directly from PostgreSQL database</span>
+      </div>
+    </div>
+    <div class="banner-right">
+      <div class="stamp-chip active-expiry-chip">
+        <mat-icon class="clock-icon">event_available</mat-icon>
+        <span class="chip-label">CURRENT EXPIRY</span>
+        <span class="chip-value">{{ activeExpiry() }}</span>
+      </div>
+      <div class="stamp-chip">
+        <span class="chip-label">DATE</span>
+        <span class="chip-value">{{ selectedDate() }}</span>
+      </div>
+      <div class="stamp-chip active-time-chip">
+        <mat-icon class="clock-icon">schedule</mat-icon>
+        <span class="chip-label">REPLAY TIME</span>
+        <span class="chip-value">{{ currentTimestamp() }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Session Configuration Panel -->
+  <mat-card class="session-config-card">
+    <div class="config-grid">
+      <!-- Index Selector -->
+      <div class="config-item">
+        <label class="item-label">Index</label>
+        <mat-form-field appearance="outline" density="compact" class="compact-field">
+          <mat-select [value]="symbol()" (selectionChange)="changeSymbol($event.value)">
+            <mat-option value="NIFTY">NIFTY</mat-option>
+            <mat-option value="BANKNIFTY">BANKNIFTY</mat-option>
+            <mat-option value="FINNIFTY">FINNIFTY</mat-option>
+          </mat-select>
+        </mat-form-field>
+      </div>
+
+      <!-- Historical Date -->
+      <div class="config-item">
+        <label class="item-label">Trading Date (PostgreSQL DB)</label>
+        @if (availableDates().length > 0) {
+          <mat-form-field appearance="outline" density="compact" class="compact-field">
+            <mat-select [value]="selectedDate()" (selectionChange)="onDateChange($event.value)" [disabled]="isPlaying()">
+              @for (d of availableDates(); track d) {
+                <mat-option [value]="d">
+                  {{ d }} (Database)
+                </mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        } @else {
+          <mat-form-field appearance="outline" density="compact" class="compact-field">
+            <input
+              matInput
+              type="date"
+              [ngModel]="selectedDate()"
+              (ngModelChange)="onDateChange($event)"
+              [disabled]="isPlaying()"
+            />
+          </mat-form-field>
+        }
+      </div>
+
+      <!-- Expiry Date Filter -->
+      <div class="config-item">
+        <label class="item-label">Expiry</label>
+        <mat-form-field appearance="outline" density="compact" class="compact-field">
+          <mat-select [value]="selectedExpiry()" (selectionChange)="onExpiryChange($event.value)" [disabled]="isPlaying()">
+            <mat-option [value]="''">Nearest / All</mat-option>
+            @for (exp of availableExpiries(); track exp) {
+              <mat-option [value]="exp">{{ exp }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+      </div>
+
+      <!-- Time Frame Selection -->
+      <div class="config-item tf-item">
+        <label class="item-label">Time Frame</label>
+        <div class="tf-button-group">
+          <button
+            type="button"
+            class="tf-btn"
+            [class.active]="timeFrame() === 1"
+            (click)="changeTimeFrame(1)"
+            [disabled]="isPlaying()"
+          >
+            1 Min
+          </button>
+          <button
+            type="button"
+            class="tf-btn"
+            [class.active]="timeFrame() === 3"
+            (click)="changeTimeFrame(3)"
+            [disabled]="isPlaying()"
+          >
+            3 Min
+          </button>
+          <button
+            type="button"
+            class="tf-btn"
+            [class.active]="timeFrame() === 5"
+            (click)="changeTimeFrame(5)"
+            [disabled]="isPlaying()"
+          >
+            5 Min
+          </button>
+        </div>
+      </div>
+
+      <!-- Start Time & End Time -->
+      <div class="config-item time-range-group">
+        <div class="time-sub">
+          <label class="item-label">Start Time</label>
+          <mat-form-field appearance="outline" density="compact" class="compact-field time-field">
+            <input
+              matInput
+              type="time"
+              [ngModel]="startTime()"
+              (ngModelChange)="startTime.set($event)"
+              [disabled]="isPlaying()"
+            />
+          </mat-form-field>
+        </div>
+        <span class="range-sep">&rarr;</span>
+        <div class="time-sub">
+          <label class="item-label">End Time</label>
+          <mat-form-field appearance="outline" density="compact" class="compact-field time-field">
+            <input
+              matInput
+              type="time"
+              [ngModel]="endTime()"
+              (ngModelChange)="endTime.set($event)"
+              [disabled]="isPlaying()"
+            />
+          </mat-form-field>
+        </div>
+      </div>
+
+      <!-- Strike Window -->
+      <div class="config-item">
+        <label class="item-label">Strike Window</label>
+        <mat-form-field appearance="outline" density="compact" class="compact-field">
+          <mat-select [value]="strikeRange()" (selectionChange)="strikeRange.set($event.value)">
+            <mat-option [value]="5">&plusmn;5 Strikes</mat-option>
+            <mat-option [value]="10">&plusmn;10 Strikes</mat-option>
+            <mat-option [value]="15">&plusmn;15 Strikes</mat-option>
+            <mat-option [value]="25">&plusmn;25 Strikes</mat-option>
+          </mat-select>
+        </mat-form-field>
+      </div>
+
+      <!-- Load Session Button -->
+      <div class="config-item load-btn-item">
+        <button
+          mat-flat-button
+          color="primary"
+          class="load-session-btn"
+          (click)="loadReplayData()"
+          [disabled]="isLoading() || isPlaying()"
+        >
+          <mat-icon *ngIf="!isLoading()">cloud_download</mat-icon>
+          <mat-progress-spinner *ngIf="isLoading()" mode="indeterminate" diameter="18"></mat-progress-spinner>
+          <span>Load Session</span>
+        </button>
+      </div>
+    </div>
+  </mat-card>
+
+  <!-- Playback Controller & Timeline Section -->
+  <mat-card class="playback-hub-card">
+    <div class="playback-upper-row">
+      <!-- Main Transport Controls -->
+      <div class="transport-controls">
+        <!-- Restart Button -->
+        <button
+          mat-icon-button
+          class="ctrl-btn"
+          (click)="restart()"
+          [disabled]="totalFrames() === 0"
+          matTooltip="Restart to Session Beginning (09:15)"
+        >
+          <mat-icon>first_page</mat-icon>
+        </button>
+
+        <!-- Previous Timestamp -->
+        <button
+          mat-icon-button
+          class="ctrl-btn"
+          (click)="stepBackward()"
+          [disabled]="totalFrames() === 0 || currentIndex() <= 0"
+          matTooltip="Previous Timestamp (|◀)"
+        >
+          <mat-icon>skip_previous</mat-icon>
+        </button>
+
+        <!-- Play / Pause Main Button -->
+        <button
+          mat-fab
+          class="play-fab-btn"
+          [class.is-active-play]="isPlaying()"
+          (click)="togglePlay()"
+          [disabled]="totalFrames() === 0"
+          [matTooltip]="isPlaying() ? 'Pause Playback' : 'Play Historical Session'"
+        >
+          <mat-icon class="play-icon">{{ isPlaying() ? 'pause' : 'play_arrow' }}</mat-icon>
+        </button>
+
+        <!-- Next Timestamp -->
+        <button
+          mat-icon-button
+          class="ctrl-btn"
+          (click)="stepForward()"
+          [disabled]="totalFrames() === 0 || currentIndex() >= totalFrames() - 1"
+          matTooltip="Next Timestamp (▶|)"
+        >
+          <mat-icon>skip_next</mat-icon>
+        </button>
+      </div>
+
+      <!-- Historical Time & Progress Indicator -->
+      <div class="current-time-indicator">
+        <div class="live-clock-badge">
+          <span class="clock-label">HISTORICAL TIME</span>
+          <span class="clock-display">{{ currentTimestamp() }}</span>
+        </div>
+        <div class="frame-counter">
+          <span>Interval {{ currentIndex() + 1 }} / {{ totalFrames() }}</span>
+          <span class="interval-tag">({{ timeFrame() }}m step)</span>
+        </div>
+      </div>
+
+      <!-- Playback Speed Selector -->
+      <div class="speed-controls">
+        <span class="speed-label">Speed:</span>
+        <div class="speed-button-group">
+          <button
+            *ngFor="let s of speedOptions"
+            type="button"
+            class="speed-btn"
+            [class.active-speed]="playbackSpeed() === s"
+            (click)="changeSpeed(s)"
+          >
+            {{ s }}x
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Timeline Scrubber Track -->
+    <div class="timeline-container">
+      <div class="timeline-markers">
+        <span class="marker">09:15</span>
+        <span class="marker">10:00</span>
+        <span class="marker">11:00</span>
+        <span class="marker">12:00</span>
+        <span class="marker">13:00</span>
+        <span class="marker">14:00</span>
+        <span class="marker">15:30</span>
+      </div>
+
+      <div class="timeline-slider-wrapper">
+        <input
+          type="range"
+          class="timeline-range-input"
+          [min]="0"
+          [max]="totalFrames() > 0 ? totalFrames() - 1 : 0"
+          [value]="currentIndex()"
+          (input)="onSliderInput($event)"
+          [disabled]="totalFrames() === 0"
+        />
+        <div class="timeline-progress-fill" [style.width.%]="progressPercent()"></div>
+      </div>
+
+      <div class="timeline-status-row">
+        <span class="timeline-start">Session Start: {{ startTime() }}</span>
+        <span class="timeline-scrub-info">Drag scrubber to jump to any historical timestamp instantly</span>
+        <span class="timeline-end">Session End: {{ endTime() }}</span>
+      </div>
+    </div>
+  </mat-card>
+
+  <!-- Real-time Historical Metrics Summary Cards -->
+  <div class="metrics-grid">
+    <!-- Spot Price -->
+    <div class="metric-card spot-card">
+      <div class="metric-header">
+        <mat-icon class="metric-icon">trending_up</mat-icon>
+        <span class="metric-title">NIFTY Spot Price</span>
+      </div>
+      <div class="metric-value-box">
+        <span class="primary-val">{{ formatNumber(currentSpot()) }}</span>
+        <span class="secondary-info">At {{ currentTimestamp() }}</span>
+      </div>
+    </div>
+
+    <!-- ATM Strike (Calculated dynamically from Spot) -->
+    <div class="metric-card atm-card">
+      <div class="metric-header">
+        <mat-icon class="metric-icon">gps_fixed</mat-icon>
+        <span class="metric-title">Historical ATM Strike</span>
+      </div>
+      <div class="metric-value-box">
+        <span class="primary-val atm-val">{{ formatNumber(currentATM()) }}</span>
+        <span class="secondary-info">ATM Rule (Ceil 50 step)</span>
+      </div>
+    </div>
+
+    <!-- Historical PCR -->
+    <div class="metric-card pcr-card">
+      <div class="metric-header">
+        <mat-icon class="metric-icon">donut_large</mat-icon>
+        <span class="metric-title">Historical PCR</span>
+      </div>
+      <div class="metric-value-box">
+        <span class="primary-val" [class.pcr-high]="currentPCR() >= 1" [class.pcr-low]="currentPCR() < 1">
+          {{ formatDecimal(currentPCR(), 2) }}
+        </span>
+        <span class="sentiment-badge" [ngClass]="getPCRSentiment(currentPCR()).class">
+          {{ getPCRSentiment(currentPCR()).label }}
+        </span>
+      </div>
+    </div>
+
+    <!-- Historical Average PCR (ATM ±3 Strikes) -->
+    <div class="metric-card avg-pcr-card">
+      <div class="metric-header">
+        <mat-icon class="metric-icon">stacked_line_chart</mat-icon>
+        <span class="metric-title">Average PCR (ATM &plusmn;3)</span>
+      </div>
+      <div class="metric-value-box">
+        <span class="primary-val" [class.pcr-high]="currentAveragePCR() >= 1" [class.pcr-low]="currentAveragePCR() < 1">
+          {{ formatDecimal(currentAveragePCR(), 2) }}
+        </span>
+        <span class="secondary-info">Put OI: {{ formatNumber(totalPutOI()) }} / Call OI: {{ formatNumber(totalCallOI()) }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Historical Option Chain Table -->
+  <mat-card class="chain-table-card">
+    <div class="table-header-bar">
+      <div class="table-title-group">
+        <mat-icon class="table-icon">table_view</mat-icon>
+        <span class="table-heading">Option Chain Snapshot</span>
+        <span class="table-subheading">&mdash; At Replay Timestamp {{ currentTimestamp() }}</span>
+      </div>
+
+      <div class="table-header-right">
+        <!-- 2-Color Legend (Green = 1st Highest, Yellow = 2nd Highest) -->
+        <div class="legend-badge-group">
+          <span class="legend-badge green-badge" matTooltip="Highest value in the column (1st Max)">
+            <span class="legend-color-box green-box"></span>
+            1st Highest
+          </span>
+          <span class="legend-badge yellow-badge" matTooltip="2nd Highest value in the column (2nd Max)">
+            <span class="legend-color-box yellow-box"></span>
+            2nd Highest
+          </span>
+        </div>
+
+        <div class="source-tag" *ngIf="dataSourceInfo()">
+          <mat-icon class="source-icon">database</mat-icon>
+          <span>{{ dataSourceInfo() }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error message if any -->
+    <div class="table-error-alert" *ngIf="errorMessage()">
+      <mat-icon>error_outline</mat-icon>
+      <span>{{ errorMessage() }}</span>
+    </div>
+
+    <!-- Option Chain Grid (NSE Boxed Style with Yellow ITM Shading & 1st/2nd Max Highlights) -->
+    <div class="table-responsive-container" *ngIf="currentStrikes().length > 0">
+      <table class="replay-chain-table">
+        <thead>
+          <tr class="super-header-row">
+            <th colspan="6" class="super-call-header">CALLS</th>
+            <th class="super-strike-header">STRIKE PRICE</th>
+            <th colspan="6" class="super-put-header">PUTS</th>
+          </tr>
+          <tr class="column-header-row">
+            <!-- CALLS -->
+            <th class="th-call">OI</th>
+            <th class="th-call">Chng in OI</th>
+            <th class="th-call">Volume</th>
+            <th class="th-call">IV</th>
+            <th class="th-call">LTP</th>
+            <th class="th-call">Net Chng</th>
+
+            <!-- STRIKE -->
+            <th class="th-strike">Strike</th>
+
+            <!-- PUTS -->
+            <th class="th-put">Net Chng</th>
+            <th class="th-put">LTP</th>
+            <th class="th-put">IV</th>
+            <th class="th-put">Volume</th>
+            <th class="th-put">Chng in OI</th>
+            <th class="th-put">OI</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            *ngFor="let row of currentStrikes()"
+            class="chain-data-row"
+            [class.atm-highlight-row]="isATM(row.strikePrice)"
+          >
+            <!-- CALL OI (Green for 1st highest, Yellow for 2nd highest) -->
+            <td
+              class="td-cell td-num"
+              [class.itm-cell]="isCallITM(row.strikePrice)"
+              [class.max-first-cell]="isMaxCallOI(row.ce?.oi)"
+              [class.max-second-cell]="isSecondMaxCallOI(row.ce?.oi)"
+            >
+              {{ formatNumber(row.ce?.oi) }}
+            </td>
+
+            <!-- CALL CHG OI (Green for 1st highest, Yellow for 2nd highest) -->
+            <td
+              class="td-cell td-num"
+              [class.itm-cell]="isCallITM(row.strikePrice)"
+              [class.max-first-cell]="isMaxCallChgOI(row.ce?.changeOI)"
+              [class.max-second-cell]="isSecondMaxCallChgOI(row.ce?.changeOI)"
+              [class.positive-val]="(row.ce?.changeOI || 0) > 0"
+              [class.negative-val]="(row.ce?.changeOI || 0) < 0"
+            >
+              {{ (row.ce?.changeOI || 0) > 0 ? '+' : '' }}{{ formatNumber(row.ce?.changeOI) }}
+            </td>
+
+            <!-- CALL VOL (Green for 1st highest, Yellow for 2nd highest) -->
+            <td
+              class="td-cell td-num"
+              [class.itm-cell]="isCallITM(row.strikePrice)"
+              [class.max-first-cell]="isMaxCallVol(row.ce?.volume)"
+              [class.max-second-cell]="isSecondMaxCallVol(row.ce?.volume)"
+            >
+              {{ formatNumber(row.ce?.volume) }}
+            </td>
+
+            <!-- CALL IV -->
+            <td class="td-cell td-num" [class.itm-cell]="isCallITM(row.strikePrice)">
+              {{ formatDecimal(row.ce?.iv, 2) }}
+            </td>
+
+            <!-- CALL LTP -->
+            <td class="td-cell td-num ltp-cell" [class.itm-cell]="isCallITM(row.strikePrice)">
+              <span class="ltp-link">{{ formatDecimal(row.ce?.ltp, 2) }}</span>
+            </td>
+
+            <!-- CALL NET CHNG -->
+            <td
+              class="td-cell td-num"
+              [class.itm-cell]="isCallITM(row.strikePrice)"
+              [class.positive-val]="(row.ce?.change || 0) > 0"
+              [class.negative-val]="(row.ce?.change || 0) < 0"
+            >
+              {{ (row.ce?.change || 0) > 0 ? '+' : '' }}{{ formatDecimal(row.ce?.change, 2) }}
+            </td>
+
+            <!-- STRIKE (CENTER) -->
+            <td class="td-cell td-strike-center" [class.atm-strike-cell]="isATM(row.strikePrice)">
+              <div class="strike-cell-wrap">
+                <span class="strike-link">{{ formatStrikePrice(row.strikePrice) }}</span>
+                <span class="atm-tag" *ngIf="isATM(row.strikePrice)">ATM</span>
+              </div>
+            </td>
+
+            <!-- PUT NET CHNG -->
+            <td
+              class="td-cell td-num"
+              [class.itm-cell]="isPutITM(row.strikePrice)"
+              [class.positive-val]="(row.pe?.change || 0) > 0"
+              [class.negative-val]="(row.pe?.change || 0) < 0"
+            >
+              {{ (row.pe?.change || 0) > 0 ? '+' : '' }}{{ formatDecimal(row.pe?.change, 2) }}
+            </td>
+
+            <!-- PUT LTP -->
+            <td class="td-cell td-num ltp-cell" [class.itm-cell]="isPutITM(row.strikePrice)">
+              <span class="ltp-link">{{ formatDecimal(row.pe?.ltp, 2) }}</span>
+            </td>
+
+            <!-- PUT IV -->
+            <td class="td-cell td-num" [class.itm-cell]="isPutITM(row.strikePrice)">
+              {{ formatDecimal(row.pe?.iv, 2) }}
+            </td>
+
+            <!-- PUT VOL (Green for 1st highest, Yellow for 2nd highest) -->
+            <td
+              class="td-cell td-num"
+              [class.itm-cell]="isPutITM(row.strikePrice)"
+              [class.max-first-cell]="isMaxPutVol(row.pe?.volume)"
+              [class.max-second-cell]="isSecondMaxPutVol(row.pe?.volume)"
+            >
+              {{ formatNumber(row.pe?.volume) }}
+            </td>
+
+            <!-- PUT CHG OI (Green for 1st highest, Yellow for 2nd highest) -->
+            <td
+              class="td-cell td-num"
+              [class.itm-cell]="isPutITM(row.strikePrice)"
+              [class.max-first-cell]="isMaxPutChgOI(row.pe?.changeOI)"
+              [class.max-second-cell]="isSecondMaxPutChgOI(row.pe?.changeOI)"
+              [class.positive-val]="(row.pe?.changeOI || 0) > 0"
+              [class.negative-val]="(row.pe?.changeOI || 0) < 0"
+            >
+              {{ (row.pe?.changeOI || 0) > 0 ? '+' : '' }}{{ formatNumber(row.pe?.changeOI) }}
+            </td>
+
+            <!-- PUT OI (Green for 1st highest, Yellow for 2nd highest) -->
+            <td
+              class="td-cell td-num"
+              [class.itm-cell]="isPutITM(row.strikePrice)"
+              [class.max-first-cell]="isMaxPutOI(row.pe?.oi)"
+              [class.max-second-cell]="isSecondMaxPutOI(row.pe?.oi)"
+            >
+              {{ formatNumber(row.pe?.oi) }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Loading Skeleton Overlay -->
+    <div class="table-loading-overlay" *ngIf="isLoading()">
+      <mat-progress-spinner mode="indeterminate" diameter="48"></mat-progress-spinner>
+      <span class="overlay-text">Loading Historical Snapshot Data...</span>
+    </div>
+  </mat-card>
+</div>
