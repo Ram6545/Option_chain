@@ -4,6 +4,24 @@ const controller = require('../controllers/optionChainController');
 
 router.get('/indices', controller.getIndices);
 
+// GET /api/option-chain/historical & /api/option-chain/history - Historical Option Chain Replay
+// Query params: ?date=2026-09-10&expiry=2026-09-15&startTime=09:15&endTime=15:30&timeFrame=1&strikeRange=3
+router.get('/option-chain/historical', controller.getHistoricalReplayData);
+router.get('/option-chain/:symbol/historical', controller.getHistoricalReplayData);
+router.get('/option-chain/history', controller.getHistoricalReplayData);
+router.get('/option-chain/history/dates', controller.getHistoricalDates);
+router.get('/option-chain/:symbol/history/dates', controller.getHistoricalDates);
+router.get('/option-chain/history/expiries', controller.getHistoricalExpiries);
+router.get('/option-chain/:symbol/history/expiries', controller.getHistoricalExpiries);
+
+// GET /api/option-chain/expiry - Active Expiry Cycle & Dynamic Expiries
+router.get('/option-chain/expiry', controller.getActiveExpiryCycle);
+router.get('/option-chain/:symbol/expiry', controller.getActiveExpiryCycle);
+
+// POST /api/option-chain/cycle/rollover - Idempotent cycle transition
+router.post('/option-chain/cycle/rollover', controller.triggerCycleRollover);
+router.post('/option-chain/:symbol/cycle/rollover', controller.triggerCycleRollover);
+
 // GET /api/option-chain/:symbol - Get latest option chain for an index
 router.get('/option-chain/:symbol', controller.getOptionChain);
 

@@ -2,6 +2,8 @@ const models = require('../models');
 const marketDataService = require('../services/marketDataService');
 const oiAnalysisService = require('../services/oiAnalysisService');
 const nseApiService = require('../services/nseApiService');
+const historicalReplayService = require('../services/historicalReplayService');
+const expiryCycleService = require('../services/expiryCycleService');
 
 /**
  * Controller layer for Option Chain API.
@@ -833,6 +835,117 @@ const savePreMarketOpen = async (req, res, next) => {
   }
 };
 
+/**
+ * Get Historical Option Chain Replay Data for an index.
+ * GET /api/option-chain/:symbol/historical
+ * or GET /api/option-chain/historical
+ * Query params:
+ *   - date: e.g. 2026-09-10
+ *   - startTime: e.g. 09:15
+ *   - endTime: e.g. 15:30
+ *   - timeFrame: e.g. 1, 3, 5
+ *   - strikeRange: e.g. 3
+ */
+const getHistoricalReplayData = async (req, res, next) => {
+  try {
+    const symbol = req.params.symbol || req.query.symbol || 'NIFTY';
+    const { date, expiry, startTime, endTime, timeFrame, strikeRange } = req.query;
+
+    const result = await historicalReplayService.getHistoricalReplay(symbol, {
+      date: date || req.params.date,
+      expiry,
+      startTime,
+      endTime,
+      timeFrame,
+      strikeRange,
+    });
+
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get distinct available historical trading dates.
+ * GET /api/option-chain/history/dates
+ */
+const getHistoricalDates = async (req, res, next) => {
+  try {
+    const symbol = req.params.symbol || req.query.symbol || 'NIFTY';
+    const dates = await historicalReplayService.getAvailableDates(symbol);
+    res.json({
+      success: true,
+      symbol: symbol.toUpperCase(),
+      count: dates.length,
+      data: dates,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get distinct available historical expiries.
+ * GET /api/option-chain/history/expiries
+ */
+const getHistoricalExpiries = async (req, res, next) => {
+  try {
+    const symbol = req.params.symbol || req.query.symbol || 'NIFTY';
+    const { date } = req.query;
+    const expiries = await historicalReplayService.getAvailableExpiries(symbol, date);
+    res.json({
+      success: true,
+      symbol: symbol.toUpperCase(),
+      date: date || null,
+      count: expiries.length,
+      data: expiries,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get active NIFTY expiry cycle and available upcoming expiries.
+ * GET /api/option-chain/expiry
+ */
+const getActiveExpiryCycle = async (req, res, next) => {
+  try {
+    const symbol = req.params.symbol || req.query.symbol || 'NIFTY';
+    const activeCycle = await expiryCycleService.getActiveCycle(symbol);
+    const expiries = await expiryCycleService.fetchDynamicExpiries(symbol);
+    res.json({
+      success: true,
+      symbol: symbol.toUpperCase(),
+      activeCycle,
+      availableExpiries: expiries,
+      nextCycleRule: 'Tuesday = Expiry Day, Wednesday = New Cycle / Archive Day',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Trigger expiry cycle rollover.
+ * POST /api/option-chain/cycle/rollover
+ */
+const triggerCycleRollover = async (req, res, next) => {
+  try {
+    const symbol = req.params.symbol || req.body?.symbol || 'NIFTY';
+    const force = req.body?.force === true || req.query?.force === 'true';
+    const result = await expiryCycleService.processCycleTransition(symbol, force);
+    res.json({
+      success: true,
+      message: force ? 'Cycle rollover executed (forced)' : 'Cycle rollover processed',
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getIndices,
   getOptionChain,
@@ -843,6 +956,11 @@ module.exports = {
   getStrikePCRAnalysis,
   getPreMarketPCR,
   savePreMarketOpen,
+  getHistoricalReplayData,
+  getHistoricalDates,
+  getHistoricalExpiries,
+  getActiveExpiryCycle,
+  triggerCycleRollover,
   refreshOptionChain,
   getUnderlyingPrice,
   getNSEUnderlyingPrice,
