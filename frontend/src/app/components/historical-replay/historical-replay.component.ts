@@ -21,15 +21,23 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatSliderModule } from '@angular/material/slider';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
-import { Subscription, interval } from 'rxjs';
 
+import { Subscription, interval } from 'rxjs';
 import { OptionChainService } from '../../services/option-chain.service';
 import {
-  HistoricalReplayItem,
   HistoricalReplayResponse,
-  StrikeData,
   IndicesResponse,
 } from '../../models/option-chain.model';
+import {
+  HistoricalDataStore,
+  ReplayController,
+  AutoSyncController,
+  ReplayMode,
+  validateTradingDay,
+  formatDisplayDate,
+  toISODateString,
+  timeToMinutes,
+} from '../../services/replay';
 
 @Component({
   selector: 'app-historical-replay',
@@ -58,6 +66,14 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
   private optionChainService = inject(OptionChainService);
   private snackBar = inject(MatSnackBar);
 
+  // Replay System Subsystems
+  public readonly dataStore = new HistoricalDataStore();
+  public readonly replayController = new ReplayController(this.dataStore);
+  public readonly autoSyncController = new AutoSyncController(
+    this.dataStore,
+    this.replayController
+  );
+
   // Configuration Signals
   symbol = signal<string>('NIFTY');
   selectedDate = signal<string>('2026-09-10');
@@ -69,126 +85,88 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
   endTime = signal<string>('15:30');
   timeFrame = signal<number>(1); // 1, 3, 5 minutes
   strikeRange = signal<number>(10); // strikes around ATM to display
-  playbackSpeed = signal<number>(1); // 0.5, 1, 2, 5, 10
 
-  // State Signals
-  replayItems = signal<HistoricalReplayItem[]>([]);
-  currentIndex = signal<number>(0);
-  isPlaying = signal<boolean>(false);
+  // Auto-Refresh State Signals
+  autoRefreshEnabled = signal<boolean>(true);
+  autoRefreshInterval = signal<number>(15); // in seconds
+  isBackgroundRefreshing = signal<boolean>(false);
+  lastRefreshedTime = signal<string>('');
+  private autoRefreshSub?: Subscription;
+
+  // UI State Signals
   isLoading = signal<boolean>(false);
   errorMessage = signal<string | null>(null);
   dataSourceInfo = signal<string>('');
   indices = signal<{ symbol: string; display_name: string }[]>([]);
 
-  // Supported Speeds
-  speedOptions: number[] = [0.5, 1, 2, 5, 10];
+  // Validation of selected trading day (weekends and holidays)
+  dateValidation = computed(() => validateTradingDay(this.selectedDate()));
+  isNonTradingDay = computed(() => !this.dateValidation().isValid);
 
-  // Playback timer subscription
-  private timerSub?: Subscription;
+  // Exposed Data Store Signals
+  totalFrames = this.dataStore.totalFrames;
+  currentIndex = this.dataStore.currentIndex;
+  currentFrame = this.dataStore.currentFrame;
+  currentSpot = this.dataStore.currentSpot;
+  currentATM = this.dataStore.currentATM;
+  currentPCR = this.dataStore.currentPCR;
+  currentAveragePCR = this.dataStore.currentAveragePCR;
+  currentTimestamp = this.dataStore.currentTimestamp;
+  currentStrikes = this.dataStore.currentStrikes;
+  totalCallOI = this.dataStore.totalCallOI;
+  totalPutOI = this.dataStore.totalPutOI;
 
-  // Computed signals
-  totalFrames = computed(() => this.replayItems().length);
+  // Top 2 Highlights
+  callOITop2 = this.dataStore.callOITop2;
+  putOITop2 = this.dataStore.putOITop2;
+  callChgOITop2 = this.dataStore.callChgOITop2;
+  putChgOITop2 = this.dataStore.putChgOITop2;
+  callVolTop2 = this.dataStore.callVolTop2;
+  putVolTop2 = this.dataStore.putVolTop2;
 
-  currentFrame = computed<HistoricalReplayItem | null>(() => {
-    const items = this.replayItems();
-    const idx = this.currentIndex();
-    if (!items || items.length === 0) return null;
-    return items[Math.min(idx, items.length - 1)] || null;
-  });
+  // Replay Controller Signals
+  isPlaying = this.replayController.isPlaying;
+  playbackSpeed = this.replayController.playbackSpeed;
+  speedOptions = this.replayController.speedOptions;
 
-  currentSpot = computed(() => this.currentFrame()?.niftyPrice ?? 0);
-  currentATM = computed(() => this.currentFrame()?.atmStrike ?? 0);
-  currentPCR = computed(() => this.currentFrame()?.pcr ?? 0);
-  currentAveragePCR = computed(() => this.currentFrame()?.averagePCR ?? 0);
-  currentTimestamp = computed(() => this.currentFrame()?.timestamp ?? this.startTime());
-  currentStrikes = computed<StrikeData[]>(() => this.currentFrame()?.optionChain ?? []);
-  totalCallOI = computed(() => this.currentFrame()?.totalCallOI ?? 0);
-  totalPutOI = computed(() => this.currentFrame()?.totalPutOI ?? 0);
+  // Auto-Sync Controller Signals
+  syncMode = this.autoSyncController.mode;
+  isLiveSync = this.autoSyncController.isLiveSync;
+  liveClock = this.autoSyncController.liveClock;
+  mappingResult = this.autoSyncController.mappingResult;
 
-  // Helper to extract top 2 distinct positive values from an array
-  private getTop2Values(values: (number | undefined)[]): { max1: number; max2: number } {
-    const valid = values.filter((v): v is number => typeof v === 'number' && v > 0);
-    if (valid.length === 0) return { max1: 0, max2: 0 };
-    const sorted = Array.from(new Set(valid)).sort((a, b) => b - a);
-    return {
-      max1: sorted[0] || 0,
-      max2: sorted[1] || 0,
-    };
-  }
+  // Display strings
+  formattedHistoricalDate = computed(() => formatDisplayDate(this.selectedDate()));
 
-  // Top 2 Call OI
-  callOITop2 = computed(() => this.getTop2Values(this.currentStrikes().map((s) => s.ce?.oi)));
-  // Top 2 Put OI
-  putOITop2 = computed(() => this.getTop2Values(this.currentStrikes().map((s) => s.pe?.oi)));
-  // Top 2 Call Change in OI
-  callChgOITop2 = computed(() => this.getTop2Values(this.currentStrikes().map((s) => s.ce?.changeOI)));
-  // Top 2 Put Change in OI
-  putChgOITop2 = computed(() => this.getTop2Values(this.currentStrikes().map((s) => s.pe?.changeOI)));
-  // Top 2 Call Volume
-  callVolTop2 = computed(() => this.getTop2Values(this.currentStrikes().map((s) => s.ce?.volume)));
-  // Top 2 Put Volume
-  putVolTop2 = computed(() => this.getTop2Values(this.currentStrikes().map((s) => s.pe?.volume)));
-
-  // Methods to identify 1st Highest (Green) and 2nd Highest (Yellow)
-  isMaxCallOI(val?: number): boolean {
-    const top = this.callOITop2();
-    return !!val && val > 0 && val === top.max1;
-  }
-  isSecondMaxCallOI(val?: number): boolean {
-    const top = this.callOITop2();
-    return !!val && val > 0 && val === top.max2;
-  }
-
-  isMaxPutOI(val?: number): boolean {
-    const top = this.putOITop2();
-    return !!val && val > 0 && val === top.max1;
-  }
-  isSecondMaxPutOI(val?: number): boolean {
-    const top = this.putOITop2();
-    return !!val && val > 0 && val === top.max2;
-  }
-
-  isMaxCallChgOI(val?: number): boolean {
-    const top = this.callChgOITop2();
-    return !!val && val > 0 && val === top.max1;
-  }
-  isSecondMaxCallChgOI(val?: number): boolean {
-    const top = this.callChgOITop2();
-    return !!val && val > 0 && val === top.max2;
-  }
-
-  isMaxPutChgOI(val?: number): boolean {
-    const top = this.putChgOITop2();
-    return !!val && val > 0 && val === top.max1;
-  }
-  isSecondMaxPutChgOI(val?: number): boolean {
-    const top = this.putChgOITop2();
-    return !!val && val > 0 && val === top.max2;
-  }
-
-  isMaxCallVol(val?: number): boolean {
-    const top = this.callVolTop2();
-    return !!val && val > 0 && val === top.max1;
-  }
-  isSecondMaxCallVol(val?: number): boolean {
-    const top = this.callVolTop2();
-    return !!val && val > 0 && val === top.max2;
-  }
-
-  isMaxPutVol(val?: number): boolean {
-    const top = this.putVolTop2();
-    return !!val && val > 0 && val === top.max1;
-  }
-  isSecondMaxPutVol(val?: number): boolean {
-    const top = this.putVolTop2();
-    return !!val && val > 0 && val === top.max2;
-  }
-
-  // Timeline Progress percentage
+  // Timeline Progress percentage (0 to 100)
   progressPercent = computed(() => {
     const total = this.totalFrames();
     if (total <= 1) return 0;
     return (this.currentIndex() / (total - 1)) * 100;
+  });
+
+  // Session progress percentage based on market clock
+  sessionProgressPercent = computed(() => {
+    return this.liveClock().progressPercent;
+  });
+
+  // Maximum allowed index based on current market clock (enforces "Never select a future historical snapshot")
+  maxAllowedSliderIndex = computed(() => {
+    const total = this.totalFrames();
+    if (total === 0) return 0;
+    const maxIdx = this.replayController.getMaxAllowedIndex();
+    return Math.min(maxIdx, total - 1);
+  });
+
+  // Sync position display detail
+  syncStatusDetail = computed(() => {
+    if (this.isLiveSync()) {
+      return `${this.liveClock().elapsedMinutes} min after market open (Live: ${this.liveClock().timeStr})`;
+    }
+    const currMin = timeToMinutes(this.currentTimestamp());
+    const openMin = 9 * 60 + 15;
+    const diff = Math.max(0, currMin - openMin);
+    return `${diff} min after market open (Live: ${this.liveClock().timeStr})`;
   });
 
   ngOnInit(): void {
@@ -197,10 +175,23 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
     this.loadHistoricalDates();
     this.loadHistoricalExpiries();
     this.loadReplayData();
+    this.setupAutoRefresh();
+
+    // Hook auto-sync minute rollover to trigger automatic refresh whenever real clock advances into a new minute
+    this.autoSyncController.onMinuteRollover = () => {
+      if (this.autoRefreshEnabled() && !this.isPlaying()) {
+        this.refreshHistoricalData(true);
+      }
+    };
   }
 
   ngOnDestroy(): void {
-    this.pause();
+    this.replayController.destroy();
+    this.autoSyncController.destroy();
+    if (this.autoRefreshSub) {
+      this.autoRefreshSub.unsubscribe();
+      this.autoRefreshSub = undefined;
+    }
   }
 
   loadIndices(): void {
@@ -229,7 +220,6 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
         }
       },
       error: () => {
-        // Fallback default
         this.activeExpiry.set('15-Sep-2026');
       },
     });
@@ -263,7 +253,8 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
   }
 
   onDateChange(newDate: string): void {
-    this.selectedDate.set(newDate);
+    const iso = toISODateString(newDate);
+    this.selectedDate.set(iso);
     this.loadHistoricalExpiries();
     this.loadReplayData();
   }
@@ -274,11 +265,36 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Load historical option chain replay dataset for the selected date, expiry, and time range.
-   * Loads the full day once so playback executes 100% locally with zero latency.
+   * Switch to nearest valid trading day when a weekend or holiday is selected.
+   */
+  selectNearestValidDate(): void {
+    const validInfo = this.dateValidation();
+    if (validInfo.nearestValidDate) {
+      this.onDateChange(validInfo.nearestValidDate);
+    }
+  }
+
+  /**
+   * Load historical option chain replay dataset.
+   * Checks cache first to avoid redundant network roundtrips.
+   * If non-trading day, warns user and avoids fake data generation.
    */
   loadReplayData(): void {
-    // Validate time range
+    // 1. Validate Trading Day
+    const validation = this.dateValidation();
+    if (!validation.isValid) {
+      this.replayController.pause(false);
+      this.dataStore.clear();
+      this.errorMessage.set(validation.reason || 'Selected date is not a trading day.');
+      this.snackBar.open(
+        validation.reason || 'Market closed on selected date',
+        'Select Nearest Day',
+        { duration: 5000, panelClass: ['warning-snackbar'] }
+      ).onAction().subscribe(() => this.selectNearestValidDate());
+      return;
+    }
+
+    // 2. Validate time range
     if (this.startTime() >= this.endTime()) {
       this.snackBar.open('Start Time must be earlier than End Time', 'Dismiss', {
         duration: 3500,
@@ -287,7 +303,38 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.pause();
+    // 3. Check DataStore in-memory cache
+    if (
+      this.dataStore.hasCached(
+        this.symbol(),
+        this.selectedDate(),
+        this.selectedExpiry(),
+        this.timeFrame()
+      )
+    ) {
+      const cached = this.dataStore.getCached(
+        this.symbol(),
+        this.selectedDate(),
+        this.selectedExpiry(),
+        this.timeFrame()
+      )!;
+      this.dataStore.loadDataset(
+        this.symbol(),
+        this.selectedDate(),
+        this.selectedExpiry(),
+        this.timeFrame(),
+        cached
+      );
+      this.errorMessage.set(null);
+      this.dataSourceInfo.set(`Instant Cache: ${cached.length} intervals loaded`);
+      // Re-align with live clock if in LIVE_SYNC mode
+      if (this.isLiveSync()) {
+        this.autoSyncController.syncHistoricalToLive(new Date());
+      }
+      return;
+    }
+
+    this.replayController.pause(false);
     this.isLoading.set(true);
     this.errorMessage.set(null);
 
@@ -304,29 +351,46 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
         next: (res: HistoricalReplayResponse) => {
           this.isLoading.set(false);
           if (res.success && res.data && res.data.length > 0) {
-            this.replayItems.set(res.data);
-            this.currentIndex.set(0);
+            this.dataStore.loadDataset(
+              this.symbol(),
+              this.selectedDate(),
+              this.selectedExpiry(),
+              this.timeFrame(),
+              res.data
+            );
             this.dataSourceInfo.set(
               res.source === 'database'
                 ? `Loaded ${res.data.length} snapshots from Database (${res.expiry ? 'Expiry: ' + res.expiry : 'Active Expiry'})`
-                : `Loaded ${res.data.length} simulation playback snapshots`
+                : `Loaded ${res.data.length} historical playback snapshots`
             );
-            this.snackBar.open(
-              `Replay session ready: ${res.data.length} intervals (${this.timeFrame()}m interval)`,
-              'OK',
-              { duration: 2500 }
-            );
+
+            // If in LIVE_SYNC mode, immediately synchronize to the current live clock
+            if (this.isLiveSync()) {
+              const mapping = this.autoSyncController.syncHistoricalToLive(new Date());
+              this.snackBar.open(
+                `Replay session synchronized to live clock: ${mapping.selectedHistoricalTime} (${mapping.statusText})`,
+                'OK',
+                { duration: 3000 }
+              );
+            } else {
+              this.snackBar.open(
+                `Replay session ready: ${res.data.length} intervals (${this.timeFrame()}m interval)`,
+                'OK',
+                { duration: 2500 }
+              );
+            }
           } else {
-            this.replayItems.set([]);
-            this.errorMessage.set('No historical data found for the selected date and range.');
+            this.dataStore.clear();
+            const msg = (res as any)?.message || 'No historical data found for the selected date.';
+            this.errorMessage.set(msg);
           }
         },
         error: (err) => {
           this.isLoading.set(false);
-          this.errorMessage.set(
-            err.error?.message || 'Failed to fetch historical option chain data from server.'
-          );
-          this.snackBar.open('Error loading historical session data', 'Close', {
+          this.dataStore.clear();
+          const errReason = err.error?.message || 'Failed to fetch historical option chain data.';
+          this.errorMessage.set(errReason);
+          this.snackBar.open(errReason, 'Close', {
             duration: 4000,
             panelClass: ['error-snackbar'],
           });
@@ -334,113 +398,138 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
       });
   }
 
-  /**
-   * Toggle between Play and Pause.
-   */
-  togglePlay(): void {
-    if (this.isPlaying()) {
-      this.pause();
-    } else {
-      this.play();
-    }
-  }
+  // --- Auto-Refresh Engine ---
 
   /**
-   * Start local playback forward in time.
+   * Setup continuous auto-refresh polling timer (default every 15s).
    */
-  play(): void {
-    const total = this.totalFrames();
-    if (total === 0) return;
-
-    // If reached end, restart from 0
-    if (this.currentIndex() >= total - 1) {
-      this.currentIndex.set(0);
+  setupAutoRefresh(): void {
+    if (this.autoRefreshSub) {
+      this.autoRefreshSub.unsubscribe();
     }
-
-    this.isPlaying.set(true);
-    this.startPlaybackTimer();
-  }
-
-  /**
-   * Pause playback. Keeps current timestamp unchanged.
-   */
-  pause(): void {
-    this.isPlaying.set(false);
-    if (this.timerSub) {
-      this.timerSub.unsubscribe();
-      this.timerSub = undefined;
-    }
-  }
-
-  /**
-   * Controlled playback timer: ticks every (1000 / playbackSpeed) ms.
-   * Advances current index by 1 on each tick.
-   */
-  private startPlaybackTimer(): void {
-    if (this.timerSub) {
-      this.timerSub.unsubscribe();
-    }
-
-    const intervalMs = Math.max(50, Math.round(1000 / this.playbackSpeed()));
-    this.timerSub = interval(intervalMs).subscribe(() => {
-      const current = this.currentIndex();
-      const total = this.totalFrames();
-
-      if (current < total - 1) {
-        this.currentIndex.set(current + 1);
-      } else {
-        // Reached end of playback
-        this.pause();
-        this.snackBar.open('Historical replay session completed.', 'Replay', {
-          duration: 3000,
-        }).onAction().subscribe(() => this.restart());
+    this.autoRefreshSub = interval(this.autoRefreshInterval() * 1000).subscribe(() => {
+      if (this.autoRefreshEnabled() && !this.isPlaying()) {
+        this.refreshHistoricalData(true);
       }
     });
   }
 
   /**
-   * Step backward by 1 interval.
+   * Toggle auto-refresh ON / OFF.
    */
-  stepBackward(): void {
-    this.pause();
-    const current = this.currentIndex();
-    if (current > 0) {
-      this.currentIndex.set(current - 1);
-    }
+  toggleAutoRefresh(): void {
+    this.autoRefreshEnabled.set(!this.autoRefreshEnabled());
+    const state = this.autoRefreshEnabled() ? 'ON' : 'OFF';
+    this.snackBar.open(`Auto-refresh ${state} (${this.autoRefreshInterval()}s interval)`, 'OK', { duration: 2000 });
   }
 
   /**
-   * Step forward by 1 interval.
+   * Change auto-refresh interval (10s, 15s, 30s, 60s).
    */
-  stepForward(): void {
-    this.pause();
-    const current = this.currentIndex();
-    if (current < this.totalFrames() - 1) {
-      this.currentIndex.set(current + 1);
-    }
+  changeAutoRefreshInterval(sec: number): void {
+    this.autoRefreshInterval.set(sec);
+    this.setupAutoRefresh();
+    this.snackBar.open(`Auto-refresh interval set to ${sec}s`, 'OK', { duration: 2000 });
   }
 
   /**
-   * Restart from the very first historical interval (index 0).
+   * Refresh historical data automatically or manually.
+   * In silent background mode, updates the dataset without interrupting UI or showing blocking spinner.
    */
+  refreshHistoricalData(silent: boolean = true): void {
+    const validation = this.dateValidation();
+    if (!validation.isValid) return;
+
+    if (this.isLoading() || this.isBackgroundRefreshing()) return;
+
+    if (silent) {
+      this.isBackgroundRefreshing.set(true);
+    } else {
+      this.isLoading.set(true);
+    }
+
+    this.optionChainService
+      .getHistoricalReplay(this.symbol(), {
+        date: this.selectedDate(),
+        expiry: this.selectedExpiry() || undefined,
+        startTime: this.startTime(),
+        endTime: this.endTime(),
+        timeFrame: this.timeFrame(),
+        strikeRange: this.strikeRange(),
+      })
+      .subscribe({
+        next: (res: HistoricalReplayResponse) => {
+          this.isLoading.set(false);
+          this.isBackgroundRefreshing.set(false);
+          if (res.success && res.data && res.data.length > 0) {
+            this.dataStore.loadDataset(
+              this.symbol(),
+              this.selectedDate(),
+              this.selectedExpiry(),
+              this.timeFrame(),
+              res.data
+            );
+            this.lastRefreshedTime.set(this.liveClock().timeWithSeconds);
+
+            // If in LIVE_SYNC mode, sync immediately to the current live clock minute
+            if (this.isLiveSync()) {
+              this.autoSyncController.syncHistoricalToLive(new Date());
+            }
+
+            if (!silent) {
+              this.snackBar.open(`Historical option chain refreshed (${res.data.length} snapshots)`, 'OK', { duration: 2000 });
+            }
+          }
+        },
+        error: () => {
+          this.isLoading.set(false);
+          this.isBackgroundRefreshing.set(false);
+        },
+      });
+  }
+
+  // --- Transport Controls ---
+
+  togglePlay(): void {
+    if (this.isLiveSync()) {
+      // Pause live sync at current timestamp and enter manual replay
+      this.autoSyncController.switchToManualReplay();
+      this.snackBar.open(`Manual Replay mode active at ${this.currentTimestamp()}`, 'Dismiss', { duration: 2000 });
+    } else {
+      if (this.isPlaying()) {
+        this.replayController.pause(true);
+      } else {
+        // If already at or beyond max allowed live ceiling, resume live sync!
+        if (this.currentIndex() >= this.maxAllowedSliderIndex()) {
+          this.resumeLiveSync();
+        } else {
+          this.replayController.play(true);
+        }
+      }
+    }
+  }
+
   restart(): void {
-    this.pause();
-    this.currentIndex.set(0);
+    this.replayController.restart();
   }
 
-  /**
-   * Jump directly to a specific timestamp index via slider or click.
-   */
+  stepBackward(): void {
+    this.replayController.stepPrevious();
+  }
+
+  stepForward(): void {
+    if (this.currentIndex() < this.maxAllowedSliderIndex()) {
+      this.replayController.stepNext();
+    } else {
+      this.snackBar.open('Cannot advance beyond current live market session time', 'OK', { duration: 2000 });
+    }
+  }
+
   seekTo(index: number): void {
-    const total = this.totalFrames();
-    if (total === 0) return;
-    const clamped = Math.max(0, Math.min(index, total - 1));
-    this.currentIndex.set(clamped);
+    const clamped = Math.max(0, Math.min(index, this.maxAllowedSliderIndex()));
+    this.replayController.seekTo(clamped);
   }
 
-  /**
-   * Handle slider drag / input change.
-   */
   onSliderInput(event: Event): void {
     const target = event.target as HTMLInputElement;
     if (target && target.value !== undefined) {
@@ -448,19 +537,23 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
     }
   }
 
-  /**
-   * Change playback speed and adjust timer dynamically if currently playing.
-   */
   changeSpeed(speed: number): void {
-    this.playbackSpeed.set(speed);
-    if (this.isPlaying()) {
-      this.startPlaybackTimer();
-    }
+    this.replayController.changeSpeed(speed);
   }
 
-  /**
-   * Change time frame (1m, 3m, 5m) and reload dataset.
-   */
+  // --- Live Sync Controls ---
+
+  resumeLiveSync(): void {
+    this.autoSyncController.resumeLiveSync();
+    this.snackBar.open('Live Clock Synchronization Resumed', 'OK', { duration: 2000 });
+  }
+
+  toggleLiveSync(): void {
+    this.autoSyncController.toggleMode();
+  }
+
+  // --- Configuration Handlers ---
+
   changeTimeFrame(tf: number): void {
     if (this.timeFrame() !== tf) {
       this.timeFrame.set(tf);
@@ -468,60 +561,39 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
     }
   }
 
-  /**
-   * Change symbol.
-   */
-  changeSymbol(symbol: string): void {
-    if (this.symbol() !== symbol) {
-      this.symbol.set(symbol);
+  changeSymbol(sym: string): void {
+    if (this.symbol() !== sym) {
+      this.symbol.set(sym);
       this.loadReplayData();
     }
   }
 
-  /**
-   * Format number for display.
-   */
+  // --- Table Formatting & Highlights ---
+
   formatNumber(val?: number): string {
     if (val === undefined || val === null || isNaN(val)) return '-';
     return Number(val).toLocaleString('en-IN');
   }
 
-  /**
-   * Format decimal for display.
-   */
   formatDecimal(val?: number, digits = 2): string {
     if (val === undefined || val === null || isNaN(val)) return '-';
     return Number(val).toFixed(digits);
   }
 
-  /**
-   * Check if strike is ATM.
-   */
   isATM(strike: number): boolean {
     return strike === this.currentATM();
   }
 
-  /**
-   * Check if Call is In The Money (ITM).
-   * For Calls: Strike < Current Spot Price.
-   */
   isCallITM(strike: number): boolean {
     const spot = this.currentSpot();
     return spot > 0 && strike < spot;
   }
 
-  /**
-   * Check if Put is In The Money (ITM).
-   * For Puts: Strike > Current Spot Price.
-   */
   isPutITM(strike: number): boolean {
     const spot = this.currentSpot();
     return spot > 0 && strike > spot;
   }
 
-  /**
-   * Format strike price with commas and 2 decimals like official NSE (e.g. 23,200.00).
-   */
   formatStrikePrice(strike: number): string {
     if (!strike && strike !== 0) return '-';
     return Number(strike).toLocaleString('en-IN', {
@@ -530,14 +602,53 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
     });
   }
 
-  /**
-   * Determine PCR sentiment badge class.
-   */
   getPCRSentiment(pcr: number): { label: string; class: string } {
     if (pcr >= 1.25) return { label: 'Strong Bullish', class: 'bullish' };
     if (pcr >= 1.05) return { label: 'Mild Bullish', class: 'mild-bullish' };
     if (pcr >= 0.95) return { label: 'Neutral', class: 'neutral' };
     if (pcr >= 0.75) return { label: 'Mild Bearish', class: 'mild-bearish' };
     return { label: 'Strong Bearish', class: 'bearish' };
+  }
+
+  isMaxCallOI(val?: number): boolean {
+    return !!val && val > 0 && val === this.callOITop2().max1;
+  }
+  isSecondMaxCallOI(val?: number): boolean {
+    return !!val && val > 0 && val === this.callOITop2().max2;
+  }
+
+  isMaxPutOI(val?: number): boolean {
+    return !!val && val > 0 && val === this.putOITop2().max1;
+  }
+  isSecondMaxPutOI(val?: number): boolean {
+    return !!val && val > 0 && val === this.putOITop2().max2;
+  }
+
+  isMaxCallChgOI(val?: number): boolean {
+    return !!val && val > 0 && val === this.callChgOITop2().max1;
+  }
+  isSecondMaxCallChgOI(val?: number): boolean {
+    return !!val && val > 0 && val === this.callChgOITop2().max2;
+  }
+
+  isMaxPutChgOI(val?: number): boolean {
+    return !!val && val > 0 && val === this.putChgOITop2().max1;
+  }
+  isSecondMaxPutChgOI(val?: number): boolean {
+    return !!val && val > 0 && val === this.putChgOITop2().max2;
+  }
+
+  isMaxCallVol(val?: number): boolean {
+    return !!val && val > 0 && val === this.callVolTop2().max1;
+  }
+  isSecondMaxCallVol(val?: number): boolean {
+    return !!val && val > 0 && val === this.callVolTop2().max2;
+  }
+
+  isMaxPutVol(val?: number): boolean {
+    return !!val && val > 0 && val === this.putVolTop2().max1;
+  }
+  isSecondMaxPutVol(val?: number): boolean {
+    return !!val && val > 0 && val === this.putVolTop2().max2;
   }
 }

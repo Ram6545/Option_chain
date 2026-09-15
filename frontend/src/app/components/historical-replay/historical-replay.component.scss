@@ -25,11 +25,11 @@
   flex-wrap: wrap;
   gap: 12px;
   padding: 10px 18px;
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  border-left: 4px solid #f59e0b;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-left: 5px solid #0284c7;
   border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
 
   .banner-left {
     display: flex;
@@ -42,15 +42,25 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    background: #ea580c;
-    color: #ffffff;
     font-weight: 800;
     font-size: 0.78rem;
     letter-spacing: 0.08em;
-    padding: 4px 10px;
-    border-radius: 5px;
+    padding: 5px 12px;
+    border-radius: 6px;
     text-transform: uppercase;
-    box-shadow: 0 2px 4px rgba(234, 88, 12, 0.25);
+    transition: all 0.2s ease;
+
+    &.live-mode {
+      background: #059669;
+      color: #ffffff;
+      box-shadow: 0 2px 6px rgba(5, 150, 105, 0.35);
+    }
+
+    &.manual-mode {
+      background: #ea580c;
+      color: #ffffff;
+      box-shadow: 0 2px 6px rgba(234, 88, 12, 0.35);
+    }
 
     .pulsing-record-dot {
       width: 8px;
@@ -59,23 +69,52 @@
       background-color: #ffffff;
 
       &.live-pulse {
-        animation: pulseRecord 1s infinite alternate;
+        animation: pulseRecord 1.2s infinite alternate;
       }
     }
   }
 
-  .banner-notice {
+  .sync-status-box {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    color: #78350f;
+    gap: 8px;
+    color: #334155;
     font-size: 0.86rem;
 
-    .notice-icon {
-      font-size: 1.1rem;
-      width: 1.1rem;
-      height: 1.1rem;
-      color: #d97706;
+    .sync-icon {
+      font-size: 1.15rem;
+      width: 1.15rem;
+      height: 1.15rem;
+      color: #0284c7;
+    }
+
+    .sync-text {
+      font-weight: 600;
+    }
+
+    .resume-sync-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      height: 28px;
+      line-height: 28px;
+      padding: 0 10px;
+      font-size: 0.76rem;
+      font-weight: 750;
+      color: #059669;
+      border-color: #10b981;
+      background: #ecfdf5;
+      border-radius: 5px;
+
+      mat-icon {
+        font-size: 1rem;
+        width: 1rem;
+        height: 1rem;
+      }
+
+      &:hover {
+        background: #d1fae5;
+      }
     }
   }
 
@@ -83,21 +122,22 @@
     display: flex;
     align-items: center;
     gap: 10px;
+    flex-wrap: wrap;
   }
 
   .stamp-chip {
     display: flex;
     align-items: center;
     gap: 6px;
-    background: #ffffff;
+    background: #f8fafc;
     border: 1px solid #cbd5e1;
     border-radius: 6px;
-    padding: 4px 10px;
+    padding: 5px 12px;
 
     .chip-label {
-      font-size: 0.7rem;
+      font-size: 0.68rem;
       color: #64748b;
-      font-weight: 700;
+      font-weight: 750;
       letter-spacing: 0.04em;
     }
 
@@ -106,6 +146,36 @@
       color: #0f172a;
       font-weight: 750;
       font-family: monospace;
+    }
+
+    &.live-clock-chip {
+      border-color: #10b981;
+      background: #f0fdf4;
+
+      .live-clock-icon {
+        font-size: 1rem;
+        width: 1rem;
+        height: 1rem;
+        color: #059669;
+      }
+
+      .live-clock-val {
+        color: #047857;
+        font-size: 0.95rem;
+        font-weight: 800;
+      }
+    }
+
+    &.date-chip {
+      border-color: #94a3b8;
+      background: #f1f5f9;
+
+      .clock-icon {
+        font-size: 1rem;
+        width: 1rem;
+        height: 1rem;
+        color: #475569;
+      }
     }
 
     &.active-time-chip {
@@ -121,27 +191,96 @@
 
       .chip-value {
         color: #0284c7;
-        font-size: 1rem;
+        font-size: 1.02rem;
         font-weight: 800;
       }
     }
 
     &.active-expiry-chip {
-      border-color: #10b981;
-      background: #ecfdf5;
+      border-color: #cbd5e1;
+      background: #ffffff;
 
       .clock-icon {
         font-size: 1rem;
         width: 1rem;
         height: 1rem;
-        color: #059669;
+        color: #64748b;
       }
 
       .chip-value {
-        color: #065f46;
-        font-size: 0.92rem;
-        font-weight: 800;
+        color: #1e293b;
+        font-size: 0.88rem;
+        font-weight: 750;
       }
+    }
+  }
+}
+
+/* =========================================================
+   Holiday & Weekend Warning Alert Banner
+   ========================================================= */
+.holiday-alert-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 18px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-left: 5px solid #dc2626;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(220, 38, 38, 0.08);
+
+  .alert-icon-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: #fee2e2;
+
+    .alert-icon {
+      color: #dc2626;
+      font-size: 1.4rem;
+      width: 1.4rem;
+      height: 1.4rem;
+    }
+  }
+
+  .alert-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+
+    .alert-title {
+      font-size: 0.95rem;
+      font-weight: 800;
+      color: #991b1b;
+    }
+
+    .alert-desc {
+      font-size: 0.86rem;
+      color: #b91c1c;
+      font-weight: 500;
+    }
+  }
+
+  .switch-date-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.84rem;
+    font-weight: 750;
+    border-radius: 6px;
+    background: #dc2626 !important;
+    color: #ffffff !important;
+    box-shadow: 0 2px 6px rgba(220, 38, 38, 0.3);
+
+    &:hover {
+      background: #b91c1c !important;
     }
   }
 }
@@ -347,6 +486,15 @@
         }
       }
 
+      &.is-live-pulse {
+        background: #059669;
+        box-shadow: 0 0 12px rgba(5, 150, 105, 0.5);
+
+        &:hover:not(:disabled) {
+          background: #047857;
+        }
+      }
+
       .play-icon {
         font-size: 28px;
         width: 28px;
@@ -359,7 +507,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
 
     .live-clock-badge {
       display: flex;
@@ -369,6 +517,20 @@
       border: 1.5px solid #0284c7;
       border-radius: 8px;
       padding: 6px 22px;
+      transition: all 0.2s ease;
+
+      &.synced-active {
+        background: #ecfdf5;
+        border-color: #059669;
+
+        .clock-label {
+          color: #047857;
+        }
+
+        .clock-display {
+          color: #059669;
+        }
+      }
 
       .clock-label {
         font-size: 0.72rem;
@@ -386,8 +548,70 @@
       }
     }
 
+    .sync-offset-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 20px;
+
+      &.is-synced {
+        background: #ecfdf5;
+        border-color: #a7f3d0;
+
+        .sync-offset-label {
+          color: #047857;
+        }
+
+        .sync-offset-value {
+          color: #065f46;
+        }
+      }
+
+      .sync-offset-label {
+        font-size: 0.66rem;
+        font-weight: 800;
+        color: #64748b;
+        letter-spacing: 0.04em;
+      }
+
+      .sync-offset-value {
+        font-size: 0.76rem;
+        font-weight: 700;
+        color: #334155;
+      }
+
+      .quick-re-sync-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        height: 22px;
+        padding: 0 8px;
+        border-radius: 12px;
+        border: 1px solid #10b981;
+        background: #059669;
+        color: #ffffff;
+        font-size: 0.7rem;
+        font-weight: 750;
+        cursor: pointer;
+        transition: all 0.15s;
+
+        mat-icon {
+          font-size: 0.85rem;
+          width: 0.85rem;
+          height: 0.85rem;
+        }
+
+        &:hover {
+          background: #047857;
+        }
+      }
+    }
+
     .frame-counter {
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       color: #475569;
       font-weight: 650;
 
@@ -400,28 +624,26 @@
 
   .speed-controls {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 10px;
 
-    .speed-label {
-      font-size: 0.86rem;
-      font-weight: 750;
-      color: #334155;
-    }
-
-    .speed-button-group {
+    .mode-toggle-group {
       display: flex;
       border-radius: 6px;
       overflow: hidden;
       border: 1px solid #cbd5e1;
       background: #f8fafc;
 
-      .speed-btn {
-        padding: 6px 12px;
+      .mode-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 12px;
         background: transparent;
         border: none;
-        color: #334155;
-        font-size: 0.86rem;
+        color: #475569;
+        font-size: 0.8rem;
         font-weight: 750;
         cursor: pointer;
         transition: all 0.15s;
@@ -430,14 +652,167 @@
           border-right: 1px solid #cbd5e1;
         }
 
-        &:hover {
-          color: #0f172a;
-          background: #e2e8f0;
-        }
-
-        &.active-speed {
+        &.active-mode {
           background: #0284c7;
           color: #ffffff;
+        }
+
+        .dot-indicator {
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+
+          &.green-dot {
+            background-color: #22c55e;
+            box-shadow: 0 0 6px #22c55e;
+          }
+        }
+      }
+    }
+
+    .auto-refresh-box {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+
+      .auto-refresh-toggle-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 6px;
+        border: 1px solid #cbd5e1;
+        background: #f8fafc;
+        color: #475569;
+        font-size: 0.78rem;
+        font-weight: 750;
+        cursor: pointer;
+        transition: all 0.15s ease;
+
+        &.active-auto-refresh {
+          background: #ecfdf5;
+          border-color: #10b981;
+          color: #065f46;
+        }
+
+        .auto-refresh-dot {
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+          background: #94a3b8;
+
+          &.live-pulse {
+            background: #10b981;
+            box-shadow: 0 0 6px #10b981;
+            animation: pulseDot 1.6s infinite;
+          }
+        }
+      }
+
+      .interval-selector {
+        display: flex;
+        border-radius: 5px;
+        overflow: hidden;
+        border: 1px solid #cbd5e1;
+        background: #f8fafc;
+
+        .interval-btn {
+          padding: 3px 7px;
+          background: transparent;
+          border: none;
+          color: #475569;
+          font-size: 0.74rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.15s;
+
+          &:not(:last-child) {
+            border-right: 1px solid #cbd5e1;
+          }
+
+          &:hover {
+            background: #e2e8f0;
+          }
+
+          &.active-interval {
+            background: #0284c7;
+            color: #ffffff;
+          }
+        }
+      }
+
+      .manual-refresh-icon-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        border: 1px solid #cbd5e1;
+        background: #ffffff;
+        color: #0284c7;
+        cursor: pointer;
+        transition: all 0.15s ease;
+
+        mat-icon {
+          font-size: 1.05rem;
+          width: 1.05rem;
+          height: 1.05rem;
+        }
+
+        &:hover:not(:disabled) {
+          background: #e0f2fe;
+          border-color: #38bdf8;
+        }
+
+        &:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+      }
+    }
+
+    .speed-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+
+      .speed-label {
+        font-size: 0.82rem;
+        font-weight: 750;
+        color: #334155;
+      }
+
+      .speed-button-group {
+        display: flex;
+        border-radius: 6px;
+        overflow: hidden;
+        border: 1px solid #cbd5e1;
+        background: #f8fafc;
+
+        .speed-btn {
+          padding: 5px 11px;
+          background: transparent;
+          border: none;
+          color: #334155;
+          font-size: 0.82rem;
+          font-weight: 750;
+          cursor: pointer;
+          transition: all 0.15s;
+
+          &:not(:last-child) {
+            border-right: 1px solid #cbd5e1;
+          }
+
+          &:hover {
+            color: #0f172a;
+            background: #e2e8f0;
+          }
+
+          &.active-speed {
+            background: #0284c7;
+            color: #ffffff;
+          }
         }
       }
     }
@@ -507,14 +882,39 @@
     .timeline-status-row {
       display: flex;
       justify-content: space-between;
+      align-items: center;
       font-size: 0.78rem;
       color: #64748b;
       font-weight: 550;
 
-      .timeline-scrub-info {
-        color: #475569;
-        font-style: italic;
-        font-weight: 600;
+      .timeline-start, .timeline-end {
+        font-weight: 700;
+      }
+
+      .timeline-session-meter {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+
+        .meter-label {
+          color: #0369a1;
+          font-weight: 700;
+          font-size: 0.78rem;
+        }
+
+        .meter-bar {
+          width: 140px;
+          height: 6px;
+          background: #e2e8f0;
+          border-radius: 3px;
+          overflow: hidden;
+
+          .meter-fill {
+            height: 100%;
+            background: #10b981;
+            transition: width 0.3s ease;
+          }
+        }
       }
     }
   }
@@ -656,6 +1056,26 @@
       align-items: center;
       gap: 14px;
       flex-wrap: wrap;
+    }
+
+    .auto-refreshed-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 9px;
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 5px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #15803d;
+
+      .pulse-icon {
+        font-size: 0.95rem;
+        width: 0.95rem;
+        height: 0.95rem;
+        color: #16a34a;
+      }
     }
 
     .legend-badge-group {
@@ -997,5 +1417,20 @@
   .transport-controls, .current-time-indicator, .speed-controls {
     justify-content: center;
   }
+}
+
+.spin-anim {
+  animation: spinReplay 1s linear infinite;
+}
+
+@keyframes spinReplay {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulseDot {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+  70% { transform: scale(1.15); box-shadow: 0 0 0 5px rgba(16, 185, 129, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
 }
 

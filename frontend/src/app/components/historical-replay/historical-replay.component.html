@@ -1,33 +1,75 @@
 <div class="historical-replay-container">
-  <!-- Disclaimer & Historical Banner -->
+  <!-- Dual-Clock & Live Synchronization Master Banner -->
   <div class="replay-watermark-banner">
     <div class="banner-left">
-      <div class="replay-badge">
-        <span class="pulsing-record-dot" [class.live-pulse]="isPlaying()"></span>
-        <span class="badge-title">HISTORICAL REPLAY</span>
+      <div class="replay-badge" [class.live-mode]="isLiveSync()" [class.manual-mode]="!isLiveSync()">
+        <span class="pulsing-record-dot" [class.live-pulse]="isLiveSync() || isPlaying()"></span>
+        <span class="badge-title">{{ isLiveSync() ? 'LIVE SYNC: ON' : 'MANUAL REPLAY' }}</span>
       </div>
-      <div class="banner-notice">
-        <mat-icon class="notice-icon">storage</mat-icon>
-        <span>Historical recorded market playback directly from PostgreSQL database</span>
+
+      <div class="sync-status-box">
+        <mat-icon class="sync-icon">{{ isLiveSync() ? 'sync' : 'tune' }}</mat-icon>
+        <span class="sync-text">
+          {{ isLiveSync() ? 'Real-time synchronized with live market clock' : 'Manual timeline inspection mode' }}
+        </span>
+        @if (!isLiveSync()) {
+          <button mat-stroked-button class="resume-sync-btn" (click)="resumeLiveSync()" matTooltip="Snap back and follow live market time">
+            <mat-icon>play_circle</mat-icon>
+            <span>Resume Live Sync</span>
+          </button>
+        }
       </div>
     </div>
+
     <div class="banner-right">
+      <!-- Live Real-World Clock -->
+      <div class="stamp-chip live-clock-chip" matTooltip="Your actual real-world clock time">
+        <mat-icon class="clock-icon live-clock-icon">access_time</mat-icon>
+        <span class="chip-label">LIVE CLOCK</span>
+        <span class="chip-value live-clock-val">{{ liveClock().timeWithSeconds }}</span>
+      </div>
+
+      <!-- Historical Trading Date -->
+      <div class="stamp-chip date-chip" matTooltip="Selected historical trading session">
+        <mat-icon class="clock-icon">calendar_today</mat-icon>
+        <span class="chip-label">HISTORICAL DATE</span>
+        <span class="chip-value">{{ formattedHistoricalDate() }}</span>
+      </div>
+
+      <!-- Historical Market Clock -->
+      <div class="stamp-chip active-time-chip" matTooltip="Historical timestamp corresponding to market session elapsed time">
+        <mat-icon class="clock-icon">history_toggle_off</mat-icon>
+        <span class="chip-label">HISTORICAL TIME</span>
+        <span class="chip-value">{{ currentTimestamp() }}</span>
+      </div>
+
+      <!-- Current Expiry -->
       <div class="stamp-chip active-expiry-chip">
         <mat-icon class="clock-icon">event_available</mat-icon>
-        <span class="chip-label">CURRENT EXPIRY</span>
+        <span class="chip-label">EXPIRY</span>
         <span class="chip-value">{{ activeExpiry() }}</span>
-      </div>
-      <div class="stamp-chip">
-        <span class="chip-label">DATE</span>
-        <span class="chip-value">{{ selectedDate() }}</span>
-      </div>
-      <div class="stamp-chip active-time-chip">
-        <mat-icon class="clock-icon">schedule</mat-icon>
-        <span class="chip-label">REPLAY TIME</span>
-        <span class="chip-value">{{ currentTimestamp() }}</span>
       </div>
     </div>
   </div>
+
+  <!-- Non-Trading Day Warning Banner (Weekends & Market Holidays) -->
+  @if (isNonTradingDay()) {
+    <div class="holiday-alert-banner">
+      <div class="alert-icon-wrap">
+        <mat-icon class="alert-icon">event_busy</mat-icon>
+      </div>
+      <div class="alert-content">
+        <span class="alert-title">Non-Trading Session Detected</span>
+        <span class="alert-desc">{{ dateValidation().reason }}</span>
+      </div>
+      @if (dateValidation().nearestValidDate) {
+        <button mat-flat-button color="accent" class="switch-date-btn" (click)="selectNearestValidDate()">
+          <mat-icon>arrow_back</mat-icon>
+          <span>Select Nearest Trading Day ({{ dateValidation().nearestValidDate }})</span>
+        </button>
+      }
+    </div>
+  }
 
   <!-- Session Configuration Panel -->
   <mat-card class="session-config-card">
@@ -166,7 +208,7 @@
           color="primary"
           class="load-session-btn"
           (click)="loadReplayData()"
-          [disabled]="isLoading() || isPlaying()"
+          [disabled]="isLoading() || isPlaying() || isNonTradingDay()"
         >
           <mat-icon *ngIf="!isLoading()">cloud_download</mat-icon>
           <mat-progress-spinner *ngIf="isLoading()" mode="indeterminate" diameter="18"></mat-progress-spinner>
@@ -187,18 +229,18 @@
           class="ctrl-btn"
           (click)="restart()"
           [disabled]="totalFrames() === 0"
-          matTooltip="Restart to Session Beginning (09:15)"
+          matTooltip="Restart to Session Beginning (09:15 AM)"
         >
           <mat-icon>first_page</mat-icon>
         </button>
 
-        <!-- Previous Timestamp -->
+        <!-- Previous Minute -->
         <button
           mat-icon-button
           class="ctrl-btn"
           (click)="stepBackward()"
           [disabled]="totalFrames() === 0 || currentIndex() <= 0"
-          matTooltip="Previous Timestamp (|◀)"
+          matTooltip="Previous Minute (|◀)"
         >
           <mat-icon>skip_previous</mat-icon>
         </button>
@@ -208,20 +250,21 @@
           mat-fab
           class="play-fab-btn"
           [class.is-active-play]="isPlaying()"
+          [class.is-live-pulse]="isLiveSync()"
           (click)="togglePlay()"
           [disabled]="totalFrames() === 0"
-          [matTooltip]="isPlaying() ? 'Pause Playback' : 'Play Historical Session'"
+          [matTooltip]="isLiveSync() ? 'Click to Pause Live Sync (Switch to Manual)' : (isPlaying() ? 'Pause Playback' : 'Play / Catch Up to Live Market')"
         >
-          <mat-icon class="play-icon">{{ isPlaying() ? 'pause' : 'play_arrow' }}</mat-icon>
+          <mat-icon class="play-icon">{{ isLiveSync() ? 'pause' : (isPlaying() ? 'pause' : 'play_arrow') }}</mat-icon>
         </button>
 
-        <!-- Next Timestamp -->
+        <!-- Next Minute -->
         <button
           mat-icon-button
           class="ctrl-btn"
           (click)="stepForward()"
-          [disabled]="totalFrames() === 0 || currentIndex() >= totalFrames() - 1"
-          matTooltip="Next Timestamp (▶|)"
+          [disabled]="totalFrames() === 0 || currentIndex() >= maxAllowedSliderIndex()"
+          matTooltip="Next Minute (▶|)"
         >
           <mat-icon>skip_next</mat-icon>
         </button>
@@ -229,29 +272,104 @@
 
       <!-- Historical Time & Progress Indicator -->
       <div class="current-time-indicator">
-        <div class="live-clock-badge">
-          <span class="clock-label">HISTORICAL TIME</span>
+        <div class="live-clock-badge" [class.synced-active]="isLiveSync()">
+          <span class="clock-label">
+            {{ isLiveSync() ? 'SYNCHRONIZED HISTORICAL TIME' : 'MANUAL HISTORICAL TIME' }}
+          </span>
           <span class="clock-display">{{ currentTimestamp() }}</span>
         </div>
+
+        <div class="sync-offset-badge" [class.is-synced]="isLiveSync()">
+          <span class="sync-offset-label">{{ isLiveSync() ? 'LIVE SYNC' : 'MANUAL' }}:</span>
+          <span class="sync-offset-value">{{ syncStatusDetail() }}</span>
+          @if (!isLiveSync()) {
+            <button type="button" class="quick-re-sync-btn" (click)="resumeLiveSync()" matTooltip="Snap back to current real-world market time">
+              <mat-icon>sync</mat-icon>
+              <span>Sync to Now</span>
+            </button>
+          }
+        </div>
+
         <div class="frame-counter">
-          <span>Interval {{ currentIndex() + 1 }} / {{ totalFrames() }}</span>
+          <span>Interval {{ currentIndex() + 1 }} / {{ maxAllowedSliderIndex() + 1 }} (Active Market Range)</span>
           <span class="interval-tag">({{ timeFrame() }}m step)</span>
         </div>
       </div>
 
-      <!-- Playback Speed Selector -->
+      <!-- Playback Speed, Mode Toggle & Auto-Refresh -->
       <div class="speed-controls">
-        <span class="speed-label">Speed:</span>
-        <div class="speed-button-group">
+        <div class="mode-toggle-group">
           <button
-            *ngFor="let s of speedOptions"
             type="button"
-            class="speed-btn"
-            [class.active-speed]="playbackSpeed() === s"
-            (click)="changeSpeed(s)"
+            class="mode-btn"
+            [class.active-mode]="isLiveSync()"
+            (click)="resumeLiveSync()"
+            matTooltip="Enable continuous real-time market synchronization"
           >
-            {{ s }}x
+            <span class="dot-indicator green-dot" *ngIf="isLiveSync()"></span>
+            Live Sync
           </button>
+          <button
+            type="button"
+            class="mode-btn"
+            [class.active-mode]="!isLiveSync()"
+            (click)="replayController.pause(true)"
+            matTooltip="Enter manual timeline exploration mode"
+          >
+            Manual
+          </button>
+        </div>
+
+        <!-- Auto-Refresh Engine Controls -->
+        <div class="auto-refresh-box">
+          <button
+            type="button"
+            class="auto-refresh-toggle-btn"
+            [class.active-auto-refresh]="autoRefreshEnabled()"
+            (click)="toggleAutoRefresh()"
+            [matTooltip]="'Toggle automatic real-time data refreshing (Currently ' + (autoRefreshEnabled() ? 'ON' : 'OFF') + ')'"
+          >
+            <span class="auto-refresh-dot" [class.live-pulse]="autoRefreshEnabled()"></span>
+            <span>Auto Refresh: {{ autoRefreshEnabled() ? 'ON' : 'OFF' }}</span>
+          </button>
+
+          <div class="interval-selector" *ngIf="autoRefreshEnabled()">
+            <button
+              *ngFor="let sec of [10, 15, 30, 60]"
+              type="button"
+              class="interval-btn"
+              [class.active-interval]="autoRefreshInterval() === sec"
+              (click)="changeAutoRefreshInterval(sec)"
+              [matTooltip]="'Refresh interval ' + sec + ' seconds'"
+            >
+              {{ sec }}s
+            </button>
+          </div>
+
+          <button
+            type="button"
+            class="manual-refresh-icon-btn"
+            (click)="refreshHistoricalData(false)"
+            [disabled]="isLoading() || isBackgroundRefreshing()"
+            matTooltip="Refresh latest market data now"
+          >
+            <mat-icon [class.spin-anim]="isLoading() || isBackgroundRefreshing()">refresh</mat-icon>
+          </button>
+        </div>
+
+        <div class="speed-box">
+          <span class="speed-label">Speed:</span>
+          <div class="speed-button-group">
+            <button
+              *ngFor="let s of speedOptions"
+              type="button"
+              class="speed-btn"
+              [class.active-speed]="playbackSpeed() === s"
+              (click)="changeSpeed(s)"
+            >
+              {{ s }}x
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -265,6 +383,7 @@
         <span class="marker">12:00</span>
         <span class="marker">13:00</span>
         <span class="marker">14:00</span>
+        <span class="marker">15:00</span>
         <span class="marker">15:30</span>
       </div>
 
@@ -273,7 +392,7 @@
           type="range"
           class="timeline-range-input"
           [min]="0"
-          [max]="totalFrames() > 0 ? totalFrames() - 1 : 0"
+          [max]="maxAllowedSliderIndex()"
           [value]="currentIndex()"
           (input)="onSliderInput($event)"
           [disabled]="totalFrames() === 0"
@@ -282,9 +401,14 @@
       </div>
 
       <div class="timeline-status-row">
-        <span class="timeline-start">Session Start: {{ startTime() }}</span>
-        <span class="timeline-scrub-info">Drag scrubber to jump to any historical timestamp instantly</span>
-        <span class="timeline-end">Session End: {{ endTime() }}</span>
+        <span class="timeline-start">Market Open: 09:15 AM</span>
+        <div class="timeline-session-meter">
+          <span class="meter-label">Session Progress: {{ sessionProgressPercent() }}%</span>
+          <div class="meter-bar">
+            <div class="meter-fill" [style.width.%]="sessionProgressPercent()"></div>
+          </div>
+        </div>
+        <span class="timeline-end">Current Live Ceiling: {{ liveClock().timeStr }}</span>
       </div>
     </div>
   </mat-card>
@@ -295,15 +419,15 @@
     <div class="metric-card spot-card">
       <div class="metric-header">
         <mat-icon class="metric-icon">trending_up</mat-icon>
-        <span class="metric-title">NIFTY Spot Price</span>
+        <span class="metric-title">{{ symbol() }} Spot Price</span>
       </div>
       <div class="metric-value-box">
         <span class="primary-val">{{ formatNumber(currentSpot()) }}</span>
-        <span class="secondary-info">At {{ currentTimestamp() }}</span>
+        <span class="secondary-info">At Replay {{ currentTimestamp() }}</span>
       </div>
     </div>
 
-    <!-- ATM Strike (Calculated dynamically from Spot) -->
+    <!-- ATM Strike -->
     <div class="metric-card atm-card">
       <div class="metric-header">
         <mat-icon class="metric-icon">gps_fixed</mat-icon>
@@ -311,7 +435,7 @@
       </div>
       <div class="metric-value-box">
         <span class="primary-val atm-val">{{ formatNumber(currentATM()) }}</span>
-        <span class="secondary-info">ATM Rule (Ceil 50 step)</span>
+        <span class="secondary-info">Strike Step: {{ symbol() === 'BANKNIFTY' ? '100' : '50' }}</span>
       </div>
     </div>
 
@@ -351,11 +475,17 @@
     <div class="table-header-bar">
       <div class="table-title-group">
         <mat-icon class="table-icon">table_view</mat-icon>
-        <span class="table-heading">Option Chain Snapshot</span>
-        <span class="table-subheading">&mdash; At Replay Timestamp {{ currentTimestamp() }}</span>
+        <span class="table-heading">Option Chain Synchronized Snapshot</span>
+        <span class="table-subheading">&mdash; At Replay Timestamp {{ currentTimestamp() }} ({{ formattedHistoricalDate() }})</span>
       </div>
 
       <div class="table-header-right">
+        <!-- Auto-Refreshed Status Pill -->
+        <div class="auto-refreshed-tag" *ngIf="lastRefreshedTime()" matTooltip="Last successful data refresh time">
+          <mat-icon class="pulse-icon" [class.spin-anim]="isBackgroundRefreshing()">sync</mat-icon>
+          <span>Auto-Refreshed: {{ lastRefreshedTime() }}</span>
+        </div>
+
         <!-- 2-Color Legend (Green = 1st Highest, Yellow = 2nd Highest) -->
         <div class="legend-badge-group">
           <span class="legend-badge green-badge" matTooltip="Highest value in the column (1st Max)">

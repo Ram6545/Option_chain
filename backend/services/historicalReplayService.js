@@ -9,6 +9,128 @@
 const models = require('../models');
 
 /**
+ * NSE / Indian Market Holiday Registry
+ */
+const NSE_MARKET_HOLIDAYS = {
+  '01-26': 'Republic Day',
+  '05-01': 'Maharashtra Day',
+  '08-15': 'Independence Day',
+  '10-02': 'Mahatma Gandhi Jayanti',
+  '12-25': 'Christmas',
+
+  // 2024
+  '2024-01-22': 'Special Holiday (Ayodhya Pran Pratishtha)',
+  '2024-01-26': 'Republic Day',
+  '2024-03-08': 'Mahashivratri',
+  '2024-03-25': 'Holi',
+  '2024-03-29': 'Good Friday',
+  '2024-04-11': 'Id-Ul-Fitr',
+  '2024-04-17': 'Ram Navami',
+  '2024-05-01': 'Maharashtra Day',
+  '2024-05-20': 'General Elections (Mumbai)',
+  '2024-06-17': 'Bakri Id',
+  '2024-07-17': 'Muharram',
+  '2024-08-15': 'Independence Day',
+  '2024-10-02': 'Mahatma Gandhi Jayanti',
+  '2024-11-01': 'Diwali Laxmi Pujan',
+  '2024-11-15': 'Guru Nanak Jayanti',
+  '2024-11-20': 'Maharashtra Assembly Elections',
+  '2024-12-25': 'Christmas',
+
+  // 2025
+  '2025-01-26': 'Republic Day',
+  '2025-02-26': 'Mahashivratri',
+  '2025-03-14': 'Holi',
+  '2025-03-31': 'Id-Ul-Fitr',
+  '2025-04-10': 'Mahavir Jayanti',
+  '2025-04-14': 'Dr. Baba Saheb Ambedkar Jayanti',
+  '2025-04-18': 'Good Friday',
+  '2025-05-01': 'Maharashtra Day',
+  '2025-06-07': 'Bakri Id',
+  '2025-07-06': 'Muharram',
+  '2025-08-15': 'Independence Day',
+  '2025-08-27': 'Ganesh Chaturthi',
+  '2025-10-02': 'Mahatma Gandhi Jayanti / Dussehra',
+  '2025-10-21': 'Diwali Laxmi Pujan',
+  '2025-10-22': 'Diwali Balipratipada',
+  '2025-11-05': 'Guru Nanak Jayanti',
+  '2025-12-25': 'Christmas',
+
+  // 2026
+  '2026-01-26': 'Republic Day',
+  '2026-02-17': 'Mahashivratri',
+  '2026-03-04': 'Holi',
+  '2026-03-20': 'Id-Ul-Fitr',
+  '2026-04-03': 'Good Friday',
+  '2026-04-14': 'Dr. Ambedkar Jayanti',
+  '2026-05-01': 'Maharashtra Day',
+  '2026-05-27': 'Bakri Id',
+  '2026-06-25': 'Muharram',
+  '2026-08-15': 'Independence Day',
+  '2026-09-14': 'Ganesh Chaturthi',
+  '2026-10-02': 'Mahatma Gandhi Jayanti',
+  '2026-10-20': 'Dussehra',
+  '2026-11-09': 'Diwali Laxmi Pujan',
+  '2026-11-10': 'Diwali Balipratipada',
+  '2026-11-24': 'Guru Nanak Jayanti',
+  '2026-12-25': 'Christmas',
+};
+
+const validateTradingDate = (dateStr) => {
+  if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return { isValid: false, reason: 'Invalid date format' };
+  }
+
+  const [y, m, d] = dateStr.split('-').map((v) => parseInt(v, 10));
+  const dateObj = new Date(y, m - 1, d, 12, 0, 0);
+  const day = dateObj.getDay();
+
+  // Weekend
+  if (day === 0 || day === 6) {
+    const dayName = day === 0 ? 'Sunday' : 'Saturday';
+    return {
+      isValid: false,
+      isWeekend: true,
+      isHoliday: false,
+      reason: `${dateStr} is a ${dayName} (Weekend - Market Closed)`,
+      nearestValidDate: findNearestTradingDate(dateStr),
+    };
+  }
+
+  // Holiday
+  const mmdd = dateStr.slice(5);
+  const holidayName = NSE_MARKET_HOLIDAYS[dateStr] || NSE_MARKET_HOLIDAYS[mmdd];
+  if (holidayName) {
+    return {
+      isValid: false,
+      isWeekend: false,
+      isHoliday: true,
+      holidayName,
+      reason: `${dateStr} is an NSE Market Holiday: ${holidayName}`,
+      nearestValidDate: findNearestTradingDate(dateStr),
+    };
+  }
+
+  return { isValid: true };
+};
+
+const findNearestTradingDate = (dateStr) => {
+  const [y, m, d] = dateStr.split('-').map((v) => parseInt(v, 10));
+  const cur = new Date(y, m - 1, d, 12, 0, 0);
+
+  for (let i = 1; i <= 14; i++) {
+    cur.setDate(cur.getDate() - 1);
+    const yr = cur.getFullYear();
+    const mo = String(cur.getMonth() + 1).padStart(2, '0');
+    const da = String(cur.getDate()).padStart(2, '0');
+    const iso = `${yr}-${mo}-${da}`;
+    const check = validateTradingDate(iso);
+    if (check.isValid) return iso;
+  }
+  return dateStr;
+};
+
+/**
  * Helper to convert "HH:mm" to total minutes from midnight.
  * e.g. "09:15" -> 9 * 60 + 15 = 555
  */
@@ -398,6 +520,24 @@ const getHistoricalReplay = async (symbol = 'NIFTY', options = {}) => {
     throw new Error(`Start time (${startTime}) must be earlier than End time (${endTime})`);
   }
 
+  // Non-trading day validation (weekends and market holidays)
+  const tradingDayCheck = validateTradingDate(dateStr);
+  if (!tradingDayCheck.isValid) {
+    return {
+      success: false,
+      isTradingDay: false,
+      isWeekend: !!tradingDayCheck.isWeekend,
+      isHoliday: !!tradingDayCheck.isHoliday,
+      holidayName: tradingDayCheck.holidayName || null,
+      message: tradingDayCheck.reason,
+      nearestValidDate: tradingDayCheck.nearestValidDate,
+      symbol: upper,
+      date: dateStr,
+      totalIntervals: 0,
+      data: [],
+    };
+  }
+
   // 1. Generate discrete target time slots
   const timeSlots = generateTimeSlots(startTime, endTime, timeFrame);
 
@@ -596,4 +736,6 @@ module.exports = {
   getAvailableDates,
   getAvailableExpiries,
   seedHistoricalDateToDB,
+  validateTradingDate,
+  findNearestTradingDate,
 };
