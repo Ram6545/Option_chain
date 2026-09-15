@@ -67,16 +67,26 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
   private optionChainService = inject(OptionChainService);
   private snackBar = inject(MatSnackBar);
 
-  // Flag to auto-scroll once on initial load / filter updates
-  private hasAutoScrolled = false;
+  // Track key to auto-scroll when historical data loads or changes
+  private lastScrolledATMKey = '';
+
+  // Collapsible configuration to keep playback controls and table in viewport simultaneously
+  isConfigCollapsed = signal<boolean>(false);
+
+  toggleConfigCollapse(): void {
+    this.isConfigCollapsed.update((v) => !v);
+  }
 
   constructor() {
     // Automatically auto-scroll to ATM strike row when historical replay data is loaded
     effect(() => {
       const strikes = this.currentStrikes();
       const atm = this.currentATM();
-      if (strikes && strikes.length > 0 && atm > 0 && !this.hasAutoScrolled) {
-        this.hasAutoScrolled = true;
+      const symbol = this.symbol();
+      const date = this.selectedDate();
+      const key = `${symbol}_${date}_${atm}_${strikes ? strikes.length : 0}`;
+      if (strikes && strikes.length > 0 && atm > 0 && this.lastScrolledATMKey !== key) {
+        this.lastScrolledATMKey = key;
         this.scrollToATMStrike();
       }
     });
@@ -296,7 +306,7 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
    * If non-trading day, warns user and avoids fake data generation.
    */
   loadReplayData(): void {
-    this.hasAutoScrolled = false;
+    this.lastScrolledATMKey = '';
 
     // 1. Validate Trading Day
     const validation = this.dateValidation();
@@ -519,12 +529,15 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
       if (this.isPlaying()) {
         this.replayController.pause(true);
       } else {
+        // Collapse configuration to ensure top playback hub and table are both visible
+        this.isConfigCollapsed.set(true);
         // If already at or beyond max allowed live ceiling, resume live sync!
         if (this.currentIndex() >= this.maxAllowedSliderIndex()) {
           this.resumeLiveSync();
         } else {
           this.replayController.play(true);
         }
+        this.scrollToATMStrike();
       }
     }
   }
@@ -609,15 +622,20 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
    */
   scrollToATMStrike(): void {
     const doScroll = () => {
-      const targetEl =
-        document.getElementById('historical-atm-strike-cell') ||
-        document.getElementById('historical-atm-strike-row') ||
-        document.querySelector('.historical-replay-container .atm-highlight-row');
-      if (targetEl) {
-        targetEl.scrollIntoView({
+      const container = document.querySelector('.historical-replay-container .table-responsive-container') as HTMLElement;
+      const targetRow = (document.getElementById('historical-atm-strike-row') ||
+        document.querySelector('.historical-replay-container .atm-highlight-row')) as HTMLElement;
+
+      if (container && targetRow) {
+        // Calculate offset relative to table container
+        const rowOffsetTop = targetRow.offsetTop;
+        const rowHeight = targetRow.offsetHeight || 38;
+        const containerHeight = container.clientHeight || 450;
+        const targetScrollTop = Math.max(0, rowOffsetTop - (containerHeight / 2) + (rowHeight / 2));
+
+        container.scrollTo({
+          top: targetScrollTop,
           behavior: 'smooth',
-          block: 'center',
-          inline: 'center',
         });
         return true;
       }
@@ -626,9 +644,9 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
 
     setTimeout(() => {
       if (!doScroll()) {
-        setTimeout(() => doScroll(), 300);
+        setTimeout(() => doScroll(), 250);
       }
-    }, 250);
+    }, 150);
   }
 
   isCallITM(strike: number): boolean {

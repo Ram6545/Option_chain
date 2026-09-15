@@ -273,6 +273,20 @@
       &.highlight-text {
         color: #4338ca;
       }
+
+      .target-atm-pill {
+        display: inline-block;
+        font-size: 0.72rem;
+        font-weight: 800;
+        background: #fef3c7;
+        color: #b45309;
+        border: 1px solid #f59e0b;
+        padding: 2px 7px;
+        border-radius: 4px;
+        margin-left: 6px;
+        vertical-align: middle;
+        letter-spacing: 0.04em;
+      }
     }
 
     .metric-footer {
