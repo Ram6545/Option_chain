@@ -39,6 +39,26 @@ export class HistoricalDataStore {
     return items[Math.min(Math.max(0, idx), items.length - 1)] || null;
   });
 
+  readonly previousFrame = computed<HistoricalReplayItem | null>(() => {
+    const items = this.dataset();
+    const idx = this.currentIndex();
+    if (!items || items.length === 0 || idx <= 0) return null;
+    return items[idx - 1] || null;
+  });
+
+  readonly previousTimestamp = computed(() => this.previousFrame()?.timestamp ?? '');
+
+  readonly previousStrikeMap = computed<Map<number, StrikeData>>(() => {
+    const prev = this.previousFrame();
+    const map = new Map<number, StrikeData>();
+    if (prev && prev.optionChain) {
+      for (const s of prev.optionChain) {
+        map.set(s.strikePrice, s);
+      }
+    }
+    return map;
+  });
+
   readonly currentTimestamp = computed(() => this.currentFrame()?.timestamp ?? '09:15');
   readonly currentSpot = computed(() => this.currentFrame()?.niftyPrice ?? 0);
   readonly currentATM = computed(() => this.currentFrame()?.atmStrike ?? 0);

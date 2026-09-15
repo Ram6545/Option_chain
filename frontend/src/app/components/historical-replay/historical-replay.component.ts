@@ -28,6 +28,7 @@ import { OptionChainService } from '../../services/option-chain.service';
 import {
   HistoricalReplayResponse,
   IndicesResponse,
+  StrikeData,
 } from '../../models/option-chain.model';
 import {
   HistoricalDataStore,
@@ -39,6 +40,14 @@ import {
   toISODateString,
   timeToMinutes,
 } from '../../services/replay';
+
+export interface PctChangeResult {
+  pct: number;
+  formatted: string;
+  isIncrease: boolean;
+  isDecrease: boolean;
+  prevVal?: number;
+}
 
 @Component({
   selector: 'app-historical-replay',
@@ -149,6 +158,61 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
   putChgOITop2 = this.dataStore.putChgOITop2;
   callVolTop2 = this.dataStore.callVolTop2;
   putVolTop2 = this.dataStore.putVolTop2;
+
+  // Percentage Change vs Previous Snapshot Signals
+  showPercentageChanges = signal<boolean>(true);
+  previousTimestamp = this.dataStore.previousTimestamp;
+
+  togglePercentageChanges(): void {
+    this.showPercentageChanges.update((v) => !v);
+  }
+
+  calcPctChange(curr?: number | null, prev?: number | null): PctChangeResult | null {
+    if (curr === undefined || curr === null || isNaN(curr)) return null;
+    if (prev === undefined || prev === null || isNaN(prev)) return null;
+    if (prev === 0) {
+      if (curr === 0) return null;
+      return {
+        pct: 100,
+        formatted: '+100%',
+        isIncrease: true,
+        isDecrease: false,
+        prevVal: prev,
+      };
+    }
+    const diff = curr - prev;
+    if (diff === 0) {
+      return {
+        pct: 0,
+        formatted: '0.00%',
+        isIncrease: false,
+        isDecrease: false,
+        prevVal: prev,
+      };
+    }
+    const pct = (diff / Math.abs(prev)) * 100;
+    const sign = pct > 0 ? '+' : '';
+    const arrow = pct > 0 ? '▲' : '▼';
+    return {
+      pct: parseFloat(pct.toFixed(2)),
+      formatted: `${arrow} ${sign}${pct.toFixed(2)}%`,
+      isIncrease: pct > 0,
+      isDecrease: pct < 0,
+      prevVal: prev,
+    };
+  }
+
+  spotPctChange = computed(() => {
+    return this.calcPctChange(this.currentSpot(), this.dataStore.previousFrame()?.niftyPrice);
+  });
+
+  pcrPctChange = computed(() => {
+    return this.calcPctChange(this.currentPCR(), this.dataStore.previousFrame()?.pcr);
+  });
+
+  avgPcrPctChange = computed(() => {
+    return this.calcPctChange(this.currentAveragePCR(), this.dataStore.previousFrame()?.averagePCR);
+  });
 
   // Replay Controller Signals
   isPlaying = this.replayController.isPlaying;
@@ -715,5 +779,59 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
   }
   isSecondMaxPutVol(val?: number): boolean {
     return !!val && val > 0 && val === this.putVolTop2().max2;
+  }
+
+  // --- Percentage Change vs Previous Data Point Column Helpers ---
+
+  getPreviousStrike(strikePrice: number): StrikeData | undefined {
+    return this.dataStore.previousStrikeMap().get(strikePrice);
+  }
+
+  getCallOIPct(strike: number, currOI?: number): PctChangeResult | null {
+    if (!this.showPercentageChanges()) return null;
+    const prev = this.getPreviousStrike(strike)?.ce?.oi;
+    return this.calcPctChange(currOI, prev);
+  }
+
+  getCallChgOIPct(strike: number, currChgOI?: number): PctChangeResult | null {
+    if (!this.showPercentageChanges()) return null;
+    const prev = this.getPreviousStrike(strike)?.ce?.changeOI;
+    return this.calcPctChange(currChgOI, prev);
+  }
+
+  getCallVolPct(strike: number, currVol?: number): PctChangeResult | null {
+    if (!this.showPercentageChanges()) return null;
+    const prev = this.getPreviousStrike(strike)?.ce?.volume;
+    return this.calcPctChange(currVol, prev);
+  }
+
+  getCallLtpPct(strike: number, currLtp?: number): PctChangeResult | null {
+    if (!this.showPercentageChanges()) return null;
+    const prev = this.getPreviousStrike(strike)?.ce?.ltp;
+    return this.calcPctChange(currLtp, prev);
+  }
+
+  getPutLtpPct(strike: number, currLtp?: number): PctChangeResult | null {
+    if (!this.showPercentageChanges()) return null;
+    const prev = this.getPreviousStrike(strike)?.pe?.ltp;
+    return this.calcPctChange(currLtp, prev);
+  }
+
+  getPutVolPct(strike: number, currVol?: number): PctChangeResult | null {
+    if (!this.showPercentageChanges()) return null;
+    const prev = this.getPreviousStrike(strike)?.pe?.volume;
+    return this.calcPctChange(currVol, prev);
+  }
+
+  getPutChgOIPct(strike: number, currChgOI?: number): PctChangeResult | null {
+    if (!this.showPercentageChanges()) return null;
+    const prev = this.getPreviousStrike(strike)?.pe?.changeOI;
+    return this.calcPctChange(currChgOI, prev);
+  }
+
+  getPutOIPct(strike: number, currOI?: number): PctChangeResult | null {
+    if (!this.showPercentageChanges()) return null;
+    const prev = this.getPreviousStrike(strike)?.pe?.oi;
+    return this.calcPctChange(currOI, prev);
   }
 }

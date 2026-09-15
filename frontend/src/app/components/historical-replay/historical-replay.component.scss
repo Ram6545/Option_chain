@@ -1,17 +1,19 @@
 :host {
   display: block;
-  padding: 16px 20px;
+  padding: 8px 14px;
   background-color: #f1f5f9;
   color: #0f172a;
-  min-height: calc(100vh - 64px);
+  min-height: calc(100vh - 52px);
   font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  box-sizing: border-box;
 }
 
 .historical-replay-container {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  max-width: 1600px;
+  gap: 8px;
+  width: 100%;
+  max-width: 100%;
   margin: 0 auto;
 }
 
@@ -23,13 +25,13 @@
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 12px;
-  padding: 10px 18px;
+  gap: 8px;
+  padding: 6px 14px;
   background: #ffffff;
   border: 1px solid #cbd5e1;
   border-left: 5px solid #0284c7;
-  border-radius: 8px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 
   .banner-left {
     display: flex;
@@ -128,11 +130,11 @@
   .stamp-chip {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     background: #f8fafc;
     border: 1px solid #cbd5e1;
-    border-radius: 6px;
-    padding: 5px 12px;
+    border-radius: 5px;
+    padding: 3px 8px;
 
     .chip-label {
       font-size: 0.68rem;
@@ -296,14 +298,20 @@
 .session-config-card {
   background: #ffffff !important;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 12px 18px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border-radius: 6px;
+  padding: 8px 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   transition: all 0.2s ease;
 
   &.collapsed {
-    padding: 8px 16px;
+    padding: 6px 14px;
     background: #f8fafc !important;
+
+    .config-header-row {
+      margin-bottom: 0;
+      padding-bottom: 0;
+      border-bottom: none;
+    }
   }
 
   .config-header-row {
@@ -312,9 +320,9 @@
     justify-content: space-between;
     cursor: pointer;
     user-select: none;
-    padding-bottom: 8px;
+    padding-bottom: 6px;
     border-bottom: 1px solid #f1f5f9;
-    margin-bottom: 12px;
+    margin-bottom: 8px;
 
     .config-title-wrap {
       display: flex;
@@ -511,15 +519,15 @@
 .playback-hub-card {
   background: #ffffff !important;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 12px 18px;
+  border-radius: 6px;
+  padding: 8px 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   position: sticky;
-  top: 0;
+  top: 52px; /* Fixed: matches 52px app toolbar height so replay clock is never clipped */
   z-index: 40;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 
   .playback-upper-row {
     display: flex;
@@ -603,8 +611,8 @@
       align-items: center;
       background: #f0f9ff;
       border: 1.5px solid #0284c7;
-      border-radius: 8px;
-      padding: 6px 22px;
+      border-radius: 6px;
+      padding: 3px 18px;
       transition: all 0.2s ease;
 
       &.synced-active {
@@ -621,18 +629,19 @@
       }
 
       .clock-label {
-        font-size: 0.72rem;
+        font-size: 0.70rem;
         font-weight: 800;
         color: #0369a1;
         letter-spacing: 0.08em;
       }
 
       .clock-display {
-        font-size: 1.85rem;
+        font-size: 1.55rem;
         font-weight: 850;
         color: #0284c7;
         font-family: 'Roboto Mono', monospace;
         letter-spacing: 0.04em;
+        line-height: 1.2;
       }
     }
 
@@ -1052,6 +1061,37 @@
       align-items: baseline;
       justify-content: space-between;
 
+      .metric-val-row {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        flex-wrap: wrap;
+
+        .metric-pct-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 2px;
+          padding: 2px 7px;
+          border-radius: 4px;
+          font-size: 0.78rem;
+          font-weight: 850;
+          font-family: 'Roboto Mono', monospace;
+          letter-spacing: -0.01em;
+
+          &.pct-up {
+            background: #dcfce7;
+            color: #15803d;
+            border: 1px solid #86efac;
+          }
+
+          &.pct-down {
+            background: #fee2e2;
+            color: #dc2626;
+            border: 1px solid #fca5a5;
+          }
+        }
+      }
+
       .primary-val {
         font-size: 1.85rem;
         font-weight: 850;
@@ -1111,19 +1151,19 @@
 .chain-table-card {
   background: #ffffff !important;
   border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  padding: 14px 16px;
+  border-radius: 6px;
+  padding: 8px 12px;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 
   .table-header-bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 12px;
-    margin-bottom: 12px;
+    gap: 8px;
+    margin-bottom: 6px;
 
     .table-title-group {
       display: flex;
@@ -1223,6 +1263,70 @@
       }
     }
 
+    .pct-toggle-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 11px;
+      border-radius: 6px;
+      border: 1.5px solid #cbd5e1;
+      background: #f8fafc;
+      color: #334155;
+      font-size: 0.8rem;
+      font-weight: 750;
+      cursor: pointer;
+      transition: all 0.15s ease;
+
+      .pct-icon {
+        font-size: 1rem;
+        width: 1rem;
+        height: 1rem;
+        color: #0284c7;
+      }
+
+      &.active-pct {
+        background: #eff6ff;
+        border-color: #3b82f6;
+        color: #1d4ed8;
+      }
+
+      &:hover {
+        background: #e2e8f0;
+      }
+    }
+
+    .pct-legend-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+
+      .pct-legend-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.74rem;
+        font-weight: 800;
+
+        .arrow-sym {
+          font-size: 0.68rem;
+        }
+
+        &.pct-legend-up {
+          background: #dcfce7;
+          color: #15803d;
+          border: 1px solid #86efac;
+        }
+
+        &.pct-legend-down {
+          background: #fee2e2;
+          color: #dc2626;
+          border: 1px solid #fca5a5;
+        }
+      }
+    }
+
     .atm-scroll-btn {
       display: inline-flex;
       align-items: center;
@@ -1290,20 +1394,23 @@
   .table-responsive-container {
     overflow-x: auto;
     overflow-y: auto;
-    max-height: calc(100vh - 330px);
-    min-height: 400px;
+    height: calc(100vh - 350px);
+    min-height: 380px;
     scroll-behavior: smooth;
     border: 1px solid #cbd5e1;
     border-radius: 4px;
     background: #ffffff;
     position: relative;
+    width: 100%;
+    box-sizing: border-box;
   }
 
   /* Table Grid */
   .replay-chain-table {
     width: 100%;
+    table-layout: auto;
     border-collapse: collapse;
-    font-size: 0.95rem; /* ~15.2px Crisp & Readable */
+    font-size: 0.875rem; /* ~14px Crisp & Space-Efficient */
     font-family: 'Roboto Mono', 'Segoe UI', monospace;
     background: #ffffff;
 
@@ -1316,9 +1423,10 @@
     /* Cell box borders like NSE table */
     th, td {
       border: 1px solid #cbd5e1;
-      padding: 7px 10px;
+      padding: 5px 5px;
       white-space: nowrap;
       vertical-align: middle;
+      box-sizing: border-box;
     }
 
     /* Super Headers (CALLS / STRIKE / PUTS) */
@@ -1326,11 +1434,11 @@
       position: sticky;
       top: 0;
       z-index: 27;
-      font-size: 0.98rem;
+      font-size: 0.88rem;
       font-weight: 850;
       text-align: center;
-      letter-spacing: 0.08em;
-      padding: 8px 10px;
+      letter-spacing: 0.05em;
+      padding: 6px 6px;
       border-bottom: 2px solid #94a3b8;
     }
 
@@ -1356,17 +1464,17 @@
     /* Column Headers */
     .column-header-row th {
       position: sticky;
-      top: 36px;
+      top: 33px;
       z-index: 26;
       background: #f8fafc;
       color: #1e293b;
       font-weight: 800;
-      font-size: 0.84rem;
+      font-size: 0.78rem;
       text-transform: uppercase;
-      letter-spacing: 0.03em;
+      letter-spacing: 0.02em;
       border-bottom: 2px solid #94a3b8;
       text-align: center;
-      padding: 7px 10px;
+      padding: 5px 4px;
     }
 
     .th-call {
@@ -1379,8 +1487,9 @@
       color: #0f172a;
       border-left: 2px solid #94a3b8;
       border-right: 2px solid #94a3b8;
-      font-size: 0.88rem;
+      font-size: 0.82rem;
       font-weight: 850;
+      padding: 5px 4px;
     }
 
     .th-put {
@@ -1405,7 +1514,7 @@
           .strike-link {
             color: #b45309 !important;
             font-weight: 900;
-            font-size: 1.1rem !important;
+            font-size: 0.96rem !important;
           }
         }
       }
@@ -1443,17 +1552,63 @@
     .td-num {
       text-align: right;
       font-variant-numeric: tabular-nums;
-      font-size: 0.95rem; /* ~15.2px */
+      font-size: 0.875rem;
       font-weight: 600;
+      padding: 5px 5px;
+    }
+
+    /* Value with Percentage Delta Badge */
+    .cell-val-pct-wrap {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 3px;
+      width: 100%;
+
+      &.put-side {
+        justify-content: flex-start;
+      }
+
+      .cell-main-val {
+        font-weight: 650;
+      }
+
+      .pct-delta-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 1px 3px;
+        border-radius: 3px;
+        font-size: 0.64rem;
+        font-weight: 850;
+        font-family: 'Roboto Mono', monospace;
+        line-height: 1.15;
+        letter-spacing: -0.02em;
+        white-space: nowrap;
+
+        &.pct-up {
+          background: #dcfce7 !important;
+          color: #15803d !important;
+          border: 1px solid #86efac !important;
+        }
+
+        &.pct-down {
+          background: #fee2e2 !important;
+          color: #dc2626 !important;
+          border: 1px solid #fca5a5 !important;
+        }
+      }
     }
 
     /* LTP Blue Link */
     .ltp-cell {
+      padding: 5px 6px;
+      text-align: right;
+
       .ltp-link {
         color: #005bb5;
         text-decoration: underline;
-        font-weight: 850;
-        font-size: 0.98rem;
+        font-weight: 800;
+        font-size: 0.88rem;
         cursor: pointer;
 
         &:hover {
@@ -1495,18 +1650,19 @@
       border-left: 2px solid #94a3b8;
       border-right: 2px solid #94a3b8;
       font-weight: 800;
+      padding: 5px 6px;
 
       .strike-cell-wrap {
         display: inline-flex;
         align-items: center;
-        gap: 8px;
+        gap: 5px;
         justify-content: center;
 
         .strike-link {
           color: #003366;
           text-decoration: underline;
           font-weight: 850;
-          font-size: 1.05rem; /* ~16.8px Bold Strike */
+          font-size: 0.94rem;
           cursor: pointer;
 
           &:hover {
@@ -1517,11 +1673,11 @@
         .atm-tag {
           background: #f59e0b;
           color: #ffffff;
-          font-size: 0.72rem;
+          font-size: 0.65rem;
           font-weight: 900;
-          padding: 2px 6px;
-          border-radius: 4px;
-          letter-spacing: 0.05em;
+          padding: 1px 4px;
+          border-radius: 3px;
+          letter-spacing: 0.03em;
         }
       }
     }
