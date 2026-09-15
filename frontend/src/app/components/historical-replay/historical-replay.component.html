@@ -428,7 +428,11 @@
     </div>
 
     <!-- ATM Strike -->
-    <div class="metric-card atm-card">
+    <div
+      class="metric-card atm-card clickable-atm-card"
+      (click)="scrollToATMStrike()"
+      matTooltip="Click to scroll directly to ATM Strike in the table"
+    >
       <div class="metric-header">
         <mat-icon class="metric-icon">gps_fixed</mat-icon>
         <span class="metric-title">Historical ATM Strike</span>
@@ -480,6 +484,17 @@
       </div>
 
       <div class="table-header-right">
+        <!-- Quick Scroll to ATM button -->
+        <button
+          class="atm-scroll-btn"
+          *ngIf="currentATM()"
+          (click)="scrollToATMStrike()"
+          matTooltip="Scroll table to Historical ATM Strike ({{ formatNumber(currentATM()) }})"
+        >
+          <mat-icon class="btn-icon">my_location</mat-icon>
+          <span>ATM ({{ formatNumber(currentATM()) }})</span>
+        </button>
+
         <!-- Auto-Refreshed Status Pill -->
         <div class="auto-refreshed-tag" *ngIf="lastRefreshedTime()" matTooltip="Last successful data refresh time">
           <mat-icon class="pulse-icon" [class.spin-anim]="isBackgroundRefreshing()">sync</mat-icon>
@@ -546,6 +561,7 @@
             *ngFor="let row of currentStrikes()"
             class="chain-data-row"
             [class.atm-highlight-row]="isATM(row.strikePrice)"
+            [attr.id]="isATM(row.strikePrice) ? 'historical-atm-strike-row' : null"
           >
             <!-- CALL OI (Green for 1st highest, Yellow for 2nd highest) -->
             <td
@@ -600,7 +616,11 @@
             </td>
 
             <!-- STRIKE (CENTER) -->
-            <td class="td-cell td-strike-center" [class.atm-strike-cell]="isATM(row.strikePrice)">
+            <td
+              class="td-cell td-strike-center"
+              [class.atm-strike-cell]="isATM(row.strikePrice)"
+              [attr.id]="isATM(row.strikePrice) ? 'historical-atm-strike-cell' : null"
+            >
               <div class="strike-cell-wrap">
                 <span class="strike-link">{{ formatStrikePrice(row.strikePrice) }}</span>
                 <span class="atm-tag" *ngIf="isATM(row.strikePrice)">ATM</span>
