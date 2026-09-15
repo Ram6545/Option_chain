@@ -297,8 +297,93 @@
   background: #ffffff !important;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  padding: 14px 18px;
+  padding: 12px 18px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+
+  &.collapsed {
+    padding: 8px 16px;
+    background: #f8fafc !important;
+  }
+
+  .config-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    user-select: none;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #f1f5f9;
+    margin-bottom: 12px;
+
+    .config-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+
+      .toggle-arrow {
+        color: #64748b;
+        font-size: 1.25rem;
+        width: 1.25rem;
+        height: 1.25rem;
+      }
+
+      .config-title {
+        font-size: 0.84rem;
+        font-weight: 800;
+        color: #334155;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .config-summary-pills {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-left: 8px;
+
+        .summary-pill {
+          font-size: 0.76rem;
+          font-weight: 700;
+          padding: 2px 8px;
+          border-radius: 4px;
+          background: #e2e8f0;
+          color: #334155;
+
+          &.highlight {
+            background: #0284c7;
+            color: #ffffff;
+          }
+        }
+      }
+    }
+
+    .collapse-toggle-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.78rem;
+      font-weight: 750;
+      color: #0284c7;
+      padding: 0 8px;
+      height: 28px;
+      line-height: 28px;
+
+      mat-icon {
+        font-size: 1rem;
+        width: 1rem;
+        height: 1rem;
+      }
+    }
+  }
+
+  &.collapsed .config-header-row {
+    padding-bottom: 0;
+    margin-bottom: 0;
+    border-bottom: none;
+  }
 
   .config-grid {
     display: grid;
@@ -427,11 +512,14 @@
   background: #ffffff !important;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  padding: 16px 20px;
+  padding: 12px 18px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
 
   .playback-upper-row {
     display: flex;
@@ -1201,10 +1289,14 @@
 
   .table-responsive-container {
     overflow-x: auto;
+    overflow-y: auto;
+    max-height: calc(100vh - 330px);
+    min-height: 400px;
     scroll-behavior: smooth;
     border: 1px solid #cbd5e1;
     border-radius: 4px;
     background: #ffffff;
+    position: relative;
   }
 
   /* Table Grid */
@@ -1215,21 +1307,30 @@
     font-family: 'Roboto Mono', 'Segoe UI', monospace;
     background: #ffffff;
 
+    thead {
+      position: sticky;
+      top: 0;
+      z-index: 25;
+    }
+
     /* Cell box borders like NSE table */
     th, td {
       border: 1px solid #cbd5e1;
-      padding: 8px 12px;
+      padding: 7px 10px;
       white-space: nowrap;
       vertical-align: middle;
     }
 
     /* Super Headers (CALLS / STRIKE / PUTS) */
     .super-header-row th {
+      position: sticky;
+      top: 0;
+      z-index: 27;
       font-size: 0.98rem;
       font-weight: 850;
       text-align: center;
       letter-spacing: 0.08em;
-      padding: 10px;
+      padding: 8px 10px;
       border-bottom: 2px solid #94a3b8;
     }
 
@@ -1254,6 +1355,9 @@
 
     /* Column Headers */
     .column-header-row th {
+      position: sticky;
+      top: 36px;
+      z-index: 26;
       background: #f8fafc;
       color: #1e293b;
       font-weight: 800;
@@ -1262,7 +1366,7 @@
       letter-spacing: 0.03em;
       border-bottom: 2px solid #94a3b8;
       text-align: center;
-      padding: 9px 10px;
+      padding: 7px 10px;
     }
 
     .th-call {

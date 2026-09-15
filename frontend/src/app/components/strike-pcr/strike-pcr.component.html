@@ -138,31 +138,32 @@
   <div *ngIf="pcrData()" class="pcr-content">
     <!-- Top Metric Summary Cards -->
     <div class="metrics-grid">
-      <!-- Card 1: Underlying Spot -->
+      <!-- Card 1: Market Value Considered -->
       <mat-card class="metric-card spot-card">
         <div class="card-header-icon">
           <mat-icon class="icon-spot">trending_up</mat-icon>
-          <span class="metric-title">{{ selectedSymbol() }} Spot</span>
+          <span class="metric-title">Market Value Considered</span>
         </div>
         <div class="metric-main-value">
-          {{ underlyingPrice() | number:'1.2-2' }}
+          ₹{{ underlyingPrice() | number:'1.2-2' }}
         </div>
         <div class="metric-footer">
-          <span class="atm-badge">ATM Strike: {{ atmStrike() }}</span>
+          <span class="atm-badge">Spot Anchor for ATM Strike</span>
         </div>
       </mat-card>
 
-      <!-- Card 2: Selected Strike Window -->
+      <!-- Card 2: Initial Strike Price (ATM) -->
       <mat-card class="metric-card target-card">
         <div class="card-header-icon">
-          <mat-icon class="icon-target">center_focus_strong</mat-icon>
-          <span class="metric-title">Selected Window</span>
+          <mat-icon class="icon-target">gps_fixed</mat-icon>
+          <span class="metric-title">Initial Strike Price (ATM)</span>
         </div>
         <div class="metric-main-value highlight-text">
-          {{ selectedStrike() }}
+          {{ atmStrike() }}
+          <span class="target-atm-pill" *ngIf="atmStrike()">ATM</span>
         </div>
         <div class="metric-footer">
-          <span>Range: ±{{ strikeRange() }} strikes ({{ strikes().length }} strikes total)</span>
+          <span>Window: &plusmn;{{ strikeRange() }} strikes (Selected: {{ selectedStrike() }})</span>
         </div>
       </mat-card>
 

@@ -72,8 +72,31 @@
   }
 
   <!-- Session Configuration Panel -->
-  <mat-card class="session-config-card">
-    <div class="config-grid">
+  <mat-card class="session-config-card" [class.collapsed]="isConfigCollapsed()">
+    <div class="config-header-row" (click)="toggleConfigCollapse()">
+      <div class="config-title-wrap">
+        <mat-icon class="toggle-arrow">{{ isConfigCollapsed() ? 'chevron_right' : 'expand_more' }}</mat-icon>
+        <span class="config-title">Session Setup</span>
+        <span class="config-summary-pills" *ngIf="isConfigCollapsed()">
+          <span class="summary-pill highlight">{{ symbol() }}</span>
+          <span class="summary-pill">{{ formattedHistoricalDate() }}</span>
+          <span class="summary-pill">Expiry: {{ activeExpiry() }}</span>
+          <span class="summary-pill">{{ timeFrame() }}m Frame</span>
+          <span class="summary-pill">&plusmn;{{ strikeRange() }} Strikes</span>
+        </span>
+      </div>
+      <button
+        mat-button
+        type="button"
+        class="collapse-toggle-btn"
+        (click)="$event.stopPropagation(); toggleConfigCollapse()"
+      >
+        <mat-icon>{{ isConfigCollapsed() ? 'tune' : 'unfold_less' }}</mat-icon>
+        <span>{{ isConfigCollapsed() ? 'Edit Setup' : 'Collapse' }}</span>
+      </button>
+    </div>
+
+    <div class="config-grid" *ngIf="!isConfigCollapsed()">
       <!-- Index Selector -->
       <div class="config-item">
         <label class="item-label">Index</label>
