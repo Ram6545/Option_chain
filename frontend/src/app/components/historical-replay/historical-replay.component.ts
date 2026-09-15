@@ -5,6 +5,7 @@ import {
   inject,
   signal,
   computed,
+  effect,
   ChangeDetectionStrategy,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -65,6 +66,21 @@ import {
 export class HistoricalReplayComponent implements OnInit, OnDestroy {
   private optionChainService = inject(OptionChainService);
   private snackBar = inject(MatSnackBar);
+
+  // Flag to auto-scroll once on initial load / filter updates
+  private hasAutoScrolled = false;
+
+  constructor() {
+    // Automatically auto-scroll to ATM strike row when historical replay data is loaded
+    effect(() => {
+      const strikes = this.currentStrikes();
+      const atm = this.currentATM();
+      if (strikes && strikes.length > 0 && atm > 0 && !this.hasAutoScrolled) {
+        this.hasAutoScrolled = true;
+        this.scrollToATMStrike();
+      }
+    });
+  }
 
   // Replay System Subsystems
   public readonly dataStore = new HistoricalDataStore();
@@ -280,6 +296,8 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
    * If non-trading day, warns user and avoids fake data generation.
    */
   loadReplayData(): void {
+    this.hasAutoScrolled = false;
+
     // 1. Validate Trading Day
     const validation = this.dateValidation();
     if (!validation.isValid) {
@@ -331,6 +349,7 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
       if (this.isLiveSync()) {
         this.autoSyncController.syncHistoricalToLive(new Date());
       }
+      this.scrollToATMStrike();
       return;
     }
 
@@ -379,6 +398,7 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
                 { duration: 2500 }
               );
             }
+            this.scrollToATMStrike();
           } else {
             this.dataStore.clear();
             const msg = (res as any)?.message || 'No historical data found for the selected date.';
@@ -582,6 +602,33 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
 
   isATM(strike: number): boolean {
     return strike === this.currentATM();
+  }
+
+  /**
+   * Automatically scroll the table container smoothly to center on the ATM (current strike price) row
+   */
+  scrollToATMStrike(): void {
+    const doScroll = () => {
+      const targetEl =
+        document.getElementById('historical-atm-strike-cell') ||
+        document.getElementById('historical-atm-strike-row') ||
+        document.querySelector('.historical-replay-container .atm-highlight-row');
+      if (targetEl) {
+        targetEl.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+          inline: 'center',
+        });
+        return true;
+      }
+      return false;
+    };
+
+    setTimeout(() => {
+      if (!doScroll()) {
+        setTimeout(() => doScroll(), 300);
+      }
+    }, 250);
   }
 
   isCallITM(strike: number): boolean {
