@@ -445,7 +445,18 @@
         <span class="metric-title">{{ symbol() }} Spot Price</span>
       </div>
       <div class="metric-value-box">
-        <span class="primary-val">{{ formatNumber(currentSpot()) }}</span>
+        <div class="metric-val-row">
+          <span class="primary-val">{{ formatNumber(currentSpot()) }}</span>
+          <span
+            *ngIf="spotPctChange() as sp"
+            class="metric-pct-badge"
+            [class.pct-up]="sp.isIncrease"
+            [class.pct-down]="sp.isDecrease"
+            [matTooltip]="'Spot change vs ' + (previousTimestamp() || 'prev') + ': ' + sp.formatted"
+          >
+            {{ sp.formatted }}
+          </span>
+        </div>
         <span class="secondary-info">At Replay {{ currentTimestamp() }}</span>
       </div>
     </div>
@@ -473,9 +484,20 @@
         <span class="metric-title">Historical PCR</span>
       </div>
       <div class="metric-value-box">
-        <span class="primary-val" [class.pcr-high]="currentPCR() >= 1" [class.pcr-low]="currentPCR() < 1">
-          {{ formatDecimal(currentPCR(), 2) }}
-        </span>
+        <div class="metric-val-row">
+          <span class="primary-val" [class.pcr-high]="currentPCR() >= 1" [class.pcr-low]="currentPCR() < 1">
+            {{ formatDecimal(currentPCR(), 2) }}
+          </span>
+          <span
+            *ngIf="pcrPctChange() as pp"
+            class="metric-pct-badge"
+            [class.pct-up]="pp.isIncrease"
+            [class.pct-down]="pp.isDecrease"
+            [matTooltip]="'PCR change vs ' + (previousTimestamp() || 'prev') + ': ' + pp.formatted"
+          >
+            {{ pp.formatted }}
+          </span>
+        </div>
         <span class="sentiment-badge" [ngClass]="getPCRSentiment(currentPCR()).class">
           {{ getPCRSentiment(currentPCR()).label }}
         </span>
@@ -489,9 +511,20 @@
         <span class="metric-title">Average PCR (ATM &plusmn;3)</span>
       </div>
       <div class="metric-value-box">
-        <span class="primary-val" [class.pcr-high]="currentAveragePCR() >= 1" [class.pcr-low]="currentAveragePCR() < 1">
-          {{ formatDecimal(currentAveragePCR(), 2) }}
-        </span>
+        <div class="metric-val-row">
+          <span class="primary-val" [class.pcr-high]="currentAveragePCR() >= 1" [class.pcr-low]="currentAveragePCR() < 1">
+            {{ formatDecimal(currentAveragePCR(), 2) }}
+          </span>
+          <span
+            *ngIf="avgPcrPctChange() as ap"
+            class="metric-pct-badge"
+            [class.pct-up]="ap.isIncrease"
+            [class.pct-down]="ap.isDecrease"
+            [matTooltip]="'Avg PCR change vs ' + (previousTimestamp() || 'prev') + ': ' + ap.formatted"
+          >
+            {{ ap.formatted }}
+          </span>
+        </div>
         <span class="secondary-info">Put OI: {{ formatNumber(totalPutOI()) }} / Call OI: {{ formatNumber(totalCallOI()) }}</span>
       </div>
     </div>
@@ -507,6 +540,28 @@
       </div>
 
       <div class="table-header-right">
+        <!-- Toggle % Change vs Previous Snapshot -->
+        <button
+          type="button"
+          class="pct-toggle-btn"
+          [class.active-pct]="showPercentageChanges()"
+          (click)="togglePercentageChanges()"
+          [matTooltip]="'Toggle percentage changes compared with previous data point (' + (previousTimestamp() || 'start') + ')'"
+        >
+          <mat-icon class="pct-icon">trending_up</mat-icon>
+          <span>% &Delta; vs Prev: {{ showPercentageChanges() ? 'ON' : 'OFF' }}</span>
+        </button>
+
+        <!-- % Change Legend -->
+        <div class="pct-legend-group" *ngIf="showPercentageChanges()">
+          <span class="pct-legend-badge pct-legend-up" matTooltip="Increased compared with previous data point">
+            <span class="arrow-sym">▲</span> Increase
+          </span>
+          <span class="pct-legend-badge pct-legend-down" matTooltip="Decreased compared with previous data point">
+            <span class="arrow-sym">▼</span> Decrease
+          </span>
+        </div>
+
         <!-- Quick Scroll to ATM button -->
         <button
           class="atm-scroll-btn"
@@ -593,7 +648,18 @@
               [class.max-first-cell]="isMaxCallOI(row.ce?.oi)"
               [class.max-second-cell]="isSecondMaxCallOI(row.ce?.oi)"
             >
-              {{ formatNumber(row.ce?.oi) }}
+              <div class="cell-val-pct-wrap">
+                <span class="cell-main-val">{{ formatNumber(row.ce?.oi) }}</span>
+                <span
+                  *ngIf="getCallOIPct(row.strikePrice, row.ce?.oi) as p"
+                  class="pct-delta-badge"
+                  [class.pct-up]="p.isIncrease"
+                  [class.pct-down]="p.isDecrease"
+                  [matTooltip]="'OI vs ' + (previousTimestamp() || 'prev') + ': ' + formatNumber(p.prevVal) + ' (' + p.formatted + ')'"
+                >
+                  {{ p.formatted }}
+                </span>
+              </div>
             </td>
 
             <!-- CALL CHG OI (Green for 1st highest, Yellow for 2nd highest) -->
@@ -605,7 +671,18 @@
               [class.positive-val]="(row.ce?.changeOI || 0) > 0"
               [class.negative-val]="(row.ce?.changeOI || 0) < 0"
             >
-              {{ (row.ce?.changeOI || 0) > 0 ? '+' : '' }}{{ formatNumber(row.ce?.changeOI) }}
+              <div class="cell-val-pct-wrap">
+                <span class="cell-main-val">{{ (row.ce?.changeOI || 0) > 0 ? '+' : '' }}{{ formatNumber(row.ce?.changeOI) }}</span>
+                <span
+                  *ngIf="getCallChgOIPct(row.strikePrice, row.ce?.changeOI) as p"
+                  class="pct-delta-badge"
+                  [class.pct-up]="p.isIncrease"
+                  [class.pct-down]="p.isDecrease"
+                  [matTooltip]="'Chg OI vs ' + (previousTimestamp() || 'prev') + ': ' + (p.prevVal && p.prevVal > 0 ? '+' : '') + formatNumber(p.prevVal) + ' (' + p.formatted + ')'"
+                >
+                  {{ p.formatted }}
+                </span>
+              </div>
             </td>
 
             <!-- CALL VOL (Green for 1st highest, Yellow for 2nd highest) -->
@@ -615,7 +692,18 @@
               [class.max-first-cell]="isMaxCallVol(row.ce?.volume)"
               [class.max-second-cell]="isSecondMaxCallVol(row.ce?.volume)"
             >
-              {{ formatNumber(row.ce?.volume) }}
+              <div class="cell-val-pct-wrap">
+                <span class="cell-main-val">{{ formatNumber(row.ce?.volume) }}</span>
+                <span
+                  *ngIf="getCallVolPct(row.strikePrice, row.ce?.volume) as p"
+                  class="pct-delta-badge"
+                  [class.pct-up]="p.isIncrease"
+                  [class.pct-down]="p.isDecrease"
+                  [matTooltip]="'Vol vs ' + (previousTimestamp() || 'prev') + ': ' + formatNumber(p.prevVal) + ' (' + p.formatted + ')'"
+                >
+                  {{ p.formatted }}
+                </span>
+              </div>
             </td>
 
             <!-- CALL IV -->
@@ -677,7 +765,18 @@
               [class.max-first-cell]="isMaxPutVol(row.pe?.volume)"
               [class.max-second-cell]="isSecondMaxPutVol(row.pe?.volume)"
             >
-              {{ formatNumber(row.pe?.volume) }}
+              <div class="cell-val-pct-wrap put-side">
+                <span
+                  *ngIf="getPutVolPct(row.strikePrice, row.pe?.volume) as p"
+                  class="pct-delta-badge"
+                  [class.pct-up]="p.isIncrease"
+                  [class.pct-down]="p.isDecrease"
+                  [matTooltip]="'Vol vs ' + (previousTimestamp() || 'prev') + ': ' + formatNumber(p.prevVal) + ' (' + p.formatted + ')'"
+                >
+                  {{ p.formatted }}
+                </span>
+                <span class="cell-main-val">{{ formatNumber(row.pe?.volume) }}</span>
+              </div>
             </td>
 
             <!-- PUT CHG OI (Green for 1st highest, Yellow for 2nd highest) -->
@@ -689,7 +788,18 @@
               [class.positive-val]="(row.pe?.changeOI || 0) > 0"
               [class.negative-val]="(row.pe?.changeOI || 0) < 0"
             >
-              {{ (row.pe?.changeOI || 0) > 0 ? '+' : '' }}{{ formatNumber(row.pe?.changeOI) }}
+              <div class="cell-val-pct-wrap put-side">
+                <span
+                  *ngIf="getPutChgOIPct(row.strikePrice, row.pe?.changeOI) as p"
+                  class="pct-delta-badge"
+                  [class.pct-up]="p.isIncrease"
+                  [class.pct-down]="p.isDecrease"
+                  [matTooltip]="'Chg OI vs ' + (previousTimestamp() || 'prev') + ': ' + (p.prevVal && p.prevVal > 0 ? '+' : '') + formatNumber(p.prevVal) + ' (' + p.formatted + ')'"
+                >
+                  {{ p.formatted }}
+                </span>
+                <span class="cell-main-val">{{ (row.pe?.changeOI || 0) > 0 ? '+' : '' }}{{ formatNumber(row.pe?.changeOI) }}</span>
+              </div>
             </td>
 
             <!-- PUT OI (Green for 1st highest, Yellow for 2nd highest) -->
@@ -699,7 +809,18 @@
               [class.max-first-cell]="isMaxPutOI(row.pe?.oi)"
               [class.max-second-cell]="isSecondMaxPutOI(row.pe?.oi)"
             >
-              {{ formatNumber(row.pe?.oi) }}
+              <div class="cell-val-pct-wrap put-side">
+                <span
+                  *ngIf="getPutOIPct(row.strikePrice, row.pe?.oi) as p"
+                  class="pct-delta-badge"
+                  [class.pct-up]="p.isIncrease"
+                  [class.pct-down]="p.isDecrease"
+                  [matTooltip]="'OI vs ' + (previousTimestamp() || 'prev') + ': ' + formatNumber(p.prevVal) + ' (' + p.formatted + ')'"
+                >
+                  {{ p.formatted }}
+                </span>
+                <span class="cell-main-val">{{ formatNumber(row.pe?.oi) }}</span>
+              </div>
             </td>
           </tr>
         </tbody>
