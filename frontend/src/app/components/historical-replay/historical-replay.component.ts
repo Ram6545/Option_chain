@@ -111,9 +111,10 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
 
   // Configuration Signals
   symbol = signal<string>('NIFTY');
-  selectedDate = signal<string>('2026-09-10');
+  readonly todayISODate = toISODateString(new Date());
+  selectedDate = signal<string>(toISODateString(new Date()));
   selectedExpiry = signal<string>('');
-  activeExpiry = signal<string>('15-Sep-2026');
+  activeExpiry = signal<string>('');
   availableExpiries = signal<string[]>([]);
   availableDates = signal<string[]>([]);
   startTime = signal<string>('09:15');
@@ -134,9 +135,10 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
   dataSourceInfo = signal<string>('');
   indices = signal<{ symbol: string; display_name: string }[]>([]);
 
-  // Validation of selected trading day (weekends and holidays)
+  // Validation of selected trading day (only applies if date not found in DB)
+  isDateInDatabase = computed(() => this.availableDates().includes(this.selectedDate()));
   dateValidation = computed(() => validateTradingDay(this.selectedDate()));
-  isNonTradingDay = computed(() => !this.dateValidation().isValid);
+  isNonTradingDay = computed(() => !this.isDateInDatabase() && !this.dateValidation().isValid);
 
   // Exposed Data Store Signals
   totalFrames = this.dataStore.totalFrames;
@@ -240,12 +242,19 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
     return this.liveClock().progressPercent;
   });
 
-  // Maximum allowed index based on current market clock (enforces "Never select a future historical snapshot")
+  isTodaySelected = computed(() => this.selectedDate() === this.todayISODate);
+
+  // Maximum allowed index based on current market clock
+  // In Live Sync mode on today's session, cap at the live clock edge.
+  // In Manual Replay mode or for past sessions, allow the entire session (just like yesterday)!
   maxAllowedSliderIndex = computed(() => {
     const total = this.totalFrames();
     if (total === 0) return 0;
-    const maxIdx = this.replayController.getMaxAllowedIndex();
-    return Math.min(maxIdx, total - 1);
+    if (this.isLiveSync() && this.isTodaySelected()) {
+      const maxIdx = this.replayController.getMaxAllowedIndex();
+      return Math.min(maxIdx, total - 1);
+    }
+    return total - 1;
   });
 
   // Sync position display detail
@@ -300,7 +309,9 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
       next: (res) => {
         if (res.success && res.activeCycle) {
           const nseExp = res.activeCycle.expiryDateNSE || res.activeCycle.expiry_date;
-          this.activeExpiry.set(nseExp);
+          if (nseExp && !this.activeExpiry()) {
+            this.activeExpiry.set(nseExp);
+          }
           if (res.availableExpiries && res.availableExpiries.length > 0) {
             this.availableExpiries.set(res.availableExpiries);
             if (!this.selectedExpiry()) {
@@ -309,9 +320,7 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
           }
         }
       },
-      error: () => {
-        this.activeExpiry.set('15-Sep-2026');
-      },
+      error: () => {},
     });
   }
 
@@ -322,31 +331,45 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
           this.availableDates.set(res.data);
           if (!res.data.includes(this.selectedDate())) {
             this.selectedDate.set(res.data[0]);
-            this.loadHistoricalExpiries();
-            this.loadReplayData();
           }
+          this.loadHistoricalExpiries(() => this.loadReplayData());
+        } else {
+          this.loadReplayData();
         }
       },
-      error: () => {},
+      error: () => {
+        this.loadReplayData();
+      },
     });
   }
 
-  loadHistoricalExpiries(): void {
+  loadHistoricalExpiries(onLoaded?: () => void): void {
     this.optionChainService.getHistoricalExpiries(this.symbol(), this.selectedDate()).subscribe({
       next: (res) => {
-        if (res.success && res.data && res.data.length > 0) {
+        if (res.success && res.data) {
           this.availableExpiries.set(res.data);
+          if (res.data.length > 0) {
+            if (!this.selectedExpiry() || !res.data.includes(this.selectedExpiry())) {
+              this.selectedExpiry.set(res.data[0]);
+            }
+          } else {
+            this.selectedExpiry.set('');
+          }
         }
+        if (onLoaded) onLoaded();
       },
-      error: () => {},
+      error: () => {
+        if (onLoaded) onLoaded();
+      },
     });
   }
 
   onDateChange(newDate: string): void {
     const iso = toISODateString(newDate);
     this.selectedDate.set(iso);
-    this.loadHistoricalExpiries();
-    this.loadReplayData();
+    this.loadHistoricalExpiries(() => {
+      this.loadReplayData();
+    });
   }
 
   onExpiryChange(newExp: string): void {
@@ -367,23 +390,25 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
   /**
    * Load historical option chain replay dataset.
    * Checks cache first to avoid redundant network roundtrips.
-   * If non-trading day, warns user and avoids fake data generation.
+   * Directly queries database and displays only authentic recorded snapshots.
    */
   loadReplayData(): void {
     this.lastScrolledATMKey = '';
 
-    // 1. Validate Trading Day
-    const validation = this.dateValidation();
-    if (!validation.isValid) {
-      this.replayController.pause(false);
-      this.dataStore.clear();
-      this.errorMessage.set(validation.reason || 'Selected date is not a trading day.');
-      this.snackBar.open(
-        validation.reason || 'Market closed on selected date',
-        'Select Nearest Day',
-        { duration: 5000, panelClass: ['warning-snackbar'] }
-      ).onAction().subscribe(() => this.selectNearestValidDate());
-      return;
+    // 1. Validate Trading Day (only if date is not already recorded in DB)
+    if (!this.isDateInDatabase()) {
+      const validation = this.dateValidation();
+      if (!validation.isValid) {
+        this.replayController.pause(false);
+        this.dataStore.clear();
+        this.errorMessage.set(validation.reason || 'Selected date is not a trading day.');
+        this.snackBar.open(
+          validation.reason || 'Market closed on selected date',
+          'Select Nearest Day',
+          { duration: 5000, panelClass: ['warning-snackbar'] }
+        ).onAction().subscribe(() => this.selectNearestValidDate());
+        return;
+      }
     }
 
     // 2. Validate time range
@@ -418,8 +443,7 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
         cached
       );
       this.errorMessage.set(null);
-      this.dataSourceInfo.set(`Instant Cache: ${cached.length} intervals loaded`);
-      // Re-align with live clock if in LIVE_SYNC mode
+      this.dataSourceInfo.set(`Instant Cache: ${cached.length} intervals loaded from database`);
       if (this.isLiveSync()) {
         this.autoSyncController.syncHistoricalToLive(new Date());
       }
@@ -451,10 +475,11 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
               this.timeFrame(),
               res.data
             );
+            if (res.expiry) {
+              this.activeExpiry.set(res.expiry);
+            }
             this.dataSourceInfo.set(
-              res.source === 'database'
-                ? `Loaded ${res.data.length} snapshots from Database (${res.expiry ? 'Expiry: ' + res.expiry : 'Active Expiry'})`
-                : `Loaded ${res.data.length} historical playback snapshots`
+              `Loaded ${res.data.length} snapshots from PostgreSQL Database (${res.expiry ? 'Expiry: ' + res.expiry : 'All Expiries'})`
             );
 
             // If in LIVE_SYNC mode, immediately synchronize to the current live clock
@@ -475,14 +500,14 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
             this.scrollToATMStrike();
           } else {
             this.dataStore.clear();
-            const msg = (res as any)?.message || 'No historical data found for the selected date.';
+            const msg = (res as any)?.message || 'No historical data found in database for the selected date.';
             this.errorMessage.set(msg);
           }
         },
         error: (err) => {
           this.isLoading.set(false);
           this.dataStore.clear();
-          const errReason = err.error?.message || 'Failed to fetch historical option chain data.';
+          const errReason = err.error?.message || 'Failed to fetch historical option chain data from database.';
           this.errorMessage.set(errReason);
           this.snackBar.open(errReason, 'Close', {
             duration: 4000,
@@ -531,8 +556,10 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
    * In silent background mode, updates the dataset without interrupting UI or showing blocking spinner.
    */
   refreshHistoricalData(silent: boolean = true): void {
-    const validation = this.dateValidation();
-    if (!validation.isValid) return;
+    if (!this.isDateInDatabase()) {
+      const validation = this.dateValidation();
+      if (!validation.isValid) return;
+    }
 
     if (this.isLoading() || this.isBackgroundRefreshing()) return;
 
@@ -563,6 +590,9 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
               this.timeFrame(),
               res.data
             );
+            if (res.expiry) {
+              this.activeExpiry.set(res.expiry);
+            }
             this.lastRefreshedTime.set(this.liveClock().timeWithSeconds);
 
             // If in LIVE_SYNC mode, sync immediately to the current live clock minute
@@ -571,7 +601,7 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
             }
 
             if (!silent) {
-              this.snackBar.open(`Historical option chain refreshed (${res.data.length} snapshots)`, 'OK', { duration: 2000 });
+              this.snackBar.open(`Historical option chain refreshed (${res.data.length} snapshots from Database)`, 'OK', { duration: 2000 });
             }
           }
         },

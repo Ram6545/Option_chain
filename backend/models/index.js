@@ -725,7 +725,7 @@ const getHistoricalSnapshotsByRange = async (
       FROM option_chain_snapshots s
       LEFT JOIN option_chain_data d ON d.snapshot_id = s.id
       WHERE s.index_id = $1
-        AND (s.trading_date = $2::date OR s.timestamp::date = $2::date)
+        AND (s.trading_date = $2::date OR (s.timestamp AT TIME ZONE 'Asia/Kolkata')::date = $2::date)
         ${expiryFilter}
       GROUP BY s.id, s.index_id, s.underlying_price, s.timestamp, s.trading_date, s.expiry_date, s.status, s.pcr, s.atm_strike
       ORDER BY s.timestamp ASC;
@@ -747,7 +747,7 @@ const getHistoricalSnapshotsByRange = async (
 const getAvailableHistoricalDates = async (indexId) => {
   try {
     const result = await db.query(
-      `SELECT DISTINCT COALESCE(trading_date, timestamp::date)::text as date
+      `SELECT DISTINCT COALESCE(trading_date, (timestamp AT TIME ZONE 'Asia/Kolkata')::date)::text as date
        FROM option_chain_snapshots
        WHERE index_id = $1
        ORDER BY date DESC`,
@@ -769,13 +769,13 @@ const getAvailableHistoricalDates = async (indexId) => {
 const getAvailableHistoricalExpiries = async (indexId, dateStr = null) => {
   try {
     let query = `
-      SELECT DISTINCT expiry_date::text as expiry
+      SELECT DISTINCT expiry_date::date::text as expiry
       FROM option_chain_snapshots
       WHERE index_id = $1 AND expiry_date IS NOT NULL
     `;
     const params = [indexId];
     if (dateStr) {
-      query += ` AND (trading_date = $2::date OR timestamp::date = $2::date)`;
+      query += ` AND (trading_date = $2::date OR (timestamp AT TIME ZONE 'Asia/Kolkata')::date = $2::date)`;
       params.push(dateStr);
     }
     query += ` ORDER BY expiry DESC`;

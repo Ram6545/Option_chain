@@ -255,224 +255,18 @@ const calculateSnapshotPCR = (strikesList, atmStrike, strikeRange = 3) => {
 };
 
 /**
- * Generate a realistic simulated historical market session for a given date.
- * Used when testing historical dates that do not yet have recorded PostgreSQL snapshots.
- *
- * @param {string} symbol - NIFTY / BANKNIFTY
- * @param {string} dateStr - "YYYY-MM-DD"
- * @param {Array<string>} timeSlots - ["09:15", "09:16", ...]
- * @param {number} strikeStep - 50 or 100
- * @param {number} strikeRange - default 3
- * @returns {Array<Object>} Historical replay items
- */
-const generateSimulatedSession = (symbol, dateStr, timeSlots, strikeStep = 50, strikeRange = 3, dynamicPrice = null) => {
-  const isNifty = symbol.toUpperCase() === 'NIFTY';
-  let basePrice = dynamicPrice && dynamicPrice > 0 ? dynamicPrice : (isNifty ? 23410 : 51200);
-
-  // Derive pseudo-random seed from date string for reproducible intraday curves
-  let seed = 0;
-  for (let i = 0; i < dateStr.length; i++) {
-    seed = (seed * 31 + dateStr.charCodeAt(i)) % 10000;
-  }
-  const randomFactor = (seed % 100) / 100; // 0.00 to 0.99
-
-  // Generate smooth intraday trajectory
-  const totalSlots = timeSlots.length;
-  const sessionData = [];
-
-  // Intraday drift curve: initial dip, morning rise, noon consolidation, closing trend
-  for (let i = 0; i < totalSlots; i++) {
-    const slot = timeSlots[i];
-    const progress = i / Math.max(1, totalSlots - 1); // 0.0 to 1.0
-
-    // Intraday fluctuation equation: sine wave + drift
-    const wave = Math.sin(progress * Math.PI * 2.5) * (isNifty ? 45 : 120);
-    const trend = (progress - 0.5) * (isNifty ? 60 : 150) * (randomFactor > 0.5 ? 1 : -0.8);
-    const noise = (Math.sin(i * 1.7) * 4);
-    const currentPrice = parseFloat((basePrice + wave + trend + noise).toFixed(2));
-
-    const atmStrike = calculateATMStrike(currentPrice, strikeStep);
-
-    // Build strikes around ATM (e.g. ATM ± 10 strikes)
-    const strikesCount = 10;
-    const strikesList = [];
-
-    for (let k = -strikesCount; k <= strikesCount; k++) {
-      const strikePrice = atmStrike + k * strikeStep;
-      const moneyness = (strikePrice - currentPrice) / currentPrice;
-
-      // Base Call & Put OI
-      const baseCallOI = Math.max(1000, Math.round(50000 * Math.exp(-Math.pow(moneyness * 40, 2))));
-      const basePutOI = Math.max(1000, Math.round(52000 * Math.exp(-Math.pow(moneyness * 40, 2))));
-
-      // Progressive intraday buildup of volume and OI
-      const oiGrowth = 1 + progress * 0.45;
-      const callOI = Math.round(baseCallOI * oiGrowth * (moneyness > 0 ? 1.3 : 0.8));
-      const putOI = Math.round(basePutOI * oiGrowth * (moneyness < 0 ? 1.35 : 0.85));
-
-      const callChangeOI = Math.round((callOI - baseCallOI) * 0.6);
-      const putChangeOI = Math.round((putOI - basePutOI) * 0.6);
-
-      // Intraday theoretical LTP using simplified intrinsic + time value
-      const tRemaining = Math.max(0.05, 1 - progress * 0.8);
-      const timeVal = Math.sqrt(tRemaining) * (isNifty ? 140 : 350);
-      const intrinsicCall = Math.max(0, currentPrice - strikePrice);
-      const intrinsicPut = Math.max(0, strikePrice - currentPrice);
-
-      const callLtp = parseFloat((intrinsicCall + timeVal * Math.exp(-Math.abs(moneyness) * 20)).toFixed(2));
-      const putLtp = parseFloat((intrinsicPut + timeVal * Math.exp(-Math.abs(moneyness) * 20)).toFixed(2));
-
-      const volume = Math.round((callOI + putOI) * 0.25 * (1 + progress));
-
-      strikesList.push({
-        strikePrice,
-        ce: {
-          oi: callOI,
-          changeOI: callChangeOI,
-          ltp: callLtp,
-          change: parseFloat(((callChangeOI / Math.max(1, callOI)) * 10).toFixed(2)),
-          volume: Math.round(volume * 0.52),
-          iv: parseFloat((11.5 + Math.abs(moneyness) * 20).toFixed(2)),
-        },
-        pe: {
-          oi: putOI,
-          changeOI: putChangeOI,
-          ltp: putLtp,
-          change: parseFloat(((putChangeOI / Math.max(1, putOI)) * 10).toFixed(2)),
-          volume: Math.round(volume * 0.48),
-          iv: parseFloat((11.8 + Math.abs(moneyness) * 20).toFixed(2)),
-        },
-      });
-    }
-
-    const { pcr, averagePCR, totalCallOI, totalPutOI } = calculateSnapshotPCR(
-      strikesList,
-      atmStrike,
-      strikeRange
-    );
-
-    sessionData.push({
-      timestamp: slot,
-      niftyPrice: currentPrice,
-      atmStrike,
-      pcr,
-      averagePCR,
-      totalCallOI,
-      totalPutOI,
-      optionChain: strikesList,
-    });
-  }
-
-  return sessionData;
-};
-
-/**
- * Dynamic Database Seeder: Populates real snapshots into PostgreSQL `option_chain_snapshots`
- * and `option_chain_data` tables for an index symbol, date, and expiry.
- * This guarantees the database contains real persisted rows, allowing dynamic querying from DB.
- */
-const seedHistoricalDateToDB = async (symbol = 'NIFTY', dateStr, expiryDate = null) => {
-  const upper = (symbol || 'NIFTY').toUpperCase().trim();
-  const indexRecord = await models.getIndexBySymbol(upper);
-  if (!indexRecord) return;
-
-  const strikeStep = indexRecord.strike_step || (upper === 'BANKNIFTY' ? 100 : 50);
-
-  // Dynamically resolve base price from PostgreSQL database if available
-  let dynamicBasePrice = null;
-  try {
-    const latestPrice = await models.getLatestUnderlyingPrice(indexRecord.id);
-    if (latestPrice?.price && parseFloat(latestPrice.price) > 0) {
-      dynamicBasePrice = parseFloat(latestPrice.price);
-    }
-  } catch (e) {}
-
-  const timeSlots = generateTimeSlots('09:15', '15:30', 5);
-  const sessionData = generateSimulatedSession(upper, dateStr, timeSlots, strikeStep, 3, dynamicBasePrice);
-
-  console.log(`💾 [Database Auto-Sync] Dynamically populating ${sessionData.length} snapshots into PostgreSQL for ${upper} on ${dateStr}...`);
-
-  for (const item of sessionData) {
-    const [h, m] = item.timestamp.split(':').map(Number);
-    const snapDate = new Date(`${dateStr}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`);
-
-    try {
-      const snapshot = await models.createSnapshot({
-        indexId: indexRecord.id,
-        underlyingPrice: item.niftyPrice,
-        timestamp: snapDate,
-        tradingDate: dateStr,
-        expiryDate: expiryDate || null,
-        status: 'ACTIVE',
-        isActiveCycle: true,
-        atmStrike: item.atmStrike,
-        pcr: item.pcr,
-      });
-
-      const optionRows = [];
-      for (const s of (item.optionChain || [])) {
-        if (s.ce) {
-          optionRows.push({
-            strike_price: s.strikePrice,
-            option_type: 'CE',
-            ltp: s.ce.ltp,
-            change: s.ce.change,
-            pchange: 0,
-            volume: s.ce.volume,
-            oi: s.ce.oi,
-            change_oi: s.ce.changeOI,
-            pchange_oi: 0,
-            iv: s.ce.iv,
-            bid_price: +(s.ce.ltp * 0.99).toFixed(2),
-            bid_qty: 100,
-            ask_price: +(s.ce.ltp * 1.01).toFixed(2),
-            ask_qty: 100,
-          });
-        }
-        if (s.pe) {
-          optionRows.push({
-            strike_price: s.strikePrice,
-            option_type: 'PE',
-            ltp: s.pe.ltp,
-            change: s.pe.change,
-            pchange: 0,
-            volume: s.pe.volume,
-            oi: s.pe.oi,
-            change_oi: s.pe.changeOI,
-            pchange_oi: 0,
-            iv: s.pe.iv,
-            bid_price: +(s.pe.ltp * 0.99).toFixed(2),
-            bid_qty: 100,
-            ask_price: +(s.pe.ltp * 1.01).toFixed(2),
-            ask_qty: 100,
-          });
-        }
-      }
-
-      if (optionRows.length > 0) {
-        await models.insertOptionChainData(snapshot.id, optionRows);
-      }
-    } catch (insertErr) {
-      console.warn('⚠️ Error inserting snapshot row:', insertErr.message);
-    }
-  }
-
-  console.log(`✅ [Database Auto-Sync] Successfully saved ${sessionData.length} snapshots to PostgreSQL table option_chain_snapshots for ${dateStr}!`);
-};
-
-/**
- * Fetch and build Historical Replay Data dynamically from PostgreSQL database.
- * If the requested date has no snapshots in PostgreSQL, it dynamically seeds and persists
- * the trading day's snapshots into database tables before returning them.
+ * Fetch and build Historical Replay Data strictly from PostgreSQL database.
+ * No static, mock, or simulated data is ever generated. Only authentic database snapshots are returned.
  *
  * @param {string} symbol - Index symbol (e.g. 'NIFTY')
  * @param {Object} options
  * @param {string} options.date - 'YYYY-MM-DD' or 'DD-MM-YYYY'
+ * @param {string} [options.expiry] - optional expiry filter
  * @param {string} [options.startTime='09:15']
  * @param {string} [options.endTime='15:30']
  * @param {number} [options.timeFrame=1] - 1, 3, 5 minutes
  * @param {number} [options.strikeRange=3] - strikes each side of ATM for Average PCR
- * @returns {Promise<Object>} Formatted historical replay response from PostgreSQL
+ * @returns {Promise<Object>} Historical replay response containing database snapshots only
  */
 const getHistoricalReplay = async (symbol = 'NIFTY', options = {}) => {
   const upper = (symbol || 'NIFTY').toUpperCase().trim();
@@ -520,28 +314,7 @@ const getHistoricalReplay = async (symbol = 'NIFTY', options = {}) => {
     throw new Error(`Start time (${startTime}) must be earlier than End time (${endTime})`);
   }
 
-  // Non-trading day validation (weekends and market holidays)
-  const tradingDayCheck = validateTradingDate(dateStr);
-  if (!tradingDayCheck.isValid) {
-    return {
-      success: false,
-      isTradingDay: false,
-      isWeekend: !!tradingDayCheck.isWeekend,
-      isHoliday: !!tradingDayCheck.isHoliday,
-      holidayName: tradingDayCheck.holidayName || null,
-      message: tradingDayCheck.reason,
-      nearestValidDate: tradingDayCheck.nearestValidDate,
-      symbol: upper,
-      date: dateStr,
-      totalIntervals: 0,
-      data: [],
-    };
-  }
-
-  // 1. Generate discrete target time slots
-  const timeSlots = generateTimeSlots(startTime, endTime, timeFrame);
-
-  // 2. Query PostgreSQL for actual snapshots on that date & expiry
+  // Query PostgreSQL database for actual snapshots on that date & expiry
   let snapshots = [];
   if (indexRecord?.id) {
     try {
@@ -557,154 +330,175 @@ const getHistoricalReplay = async (symbol = 'NIFTY', options = {}) => {
     }
   }
 
-  // If no snapshots exist in PostgreSQL yet for this date, automatically seed & persist them into DB!
-  if (!snapshots || snapshots.length === 0) {
-    console.log(`ℹ️ [Historical Replay] No snapshots in DB for ${upper} on ${dateStr}. Auto-populating database dynamically...`);
-    await seedHistoricalDateToDB(upper, dateStr, expiryISO);
-
-    // Re-query PostgreSQL to get the dynamic database records
-    if (indexRecord?.id) {
-      try {
-        snapshots = await models.getHistoricalSnapshotsByRange(
-          indexRecord.id,
-          dateStr,
-          expiryISO,
-          startTime,
-          endTime
-        );
-      } catch (e) {
-        console.warn('⚠️ Re-query error:', e.message);
-      }
-    }
-  }
-
-  // 3. Process database snapshots and bucket-match to requested interval slots
-  if (snapshots && snapshots.length > 0) {
-    console.log(`📈 [Historical Replay] Loaded ${snapshots.length} snapshots from PostgreSQL for ${upper} on ${dateStr} (expiry: ${expiryISO || 'ALL'})`);
-
-    // Map each snapshot to its minute of the day
-    const snapshotList = snapshots.map((s) => {
-      let hours = 9;
-      let mins = 15;
-      if (s.timestamp) {
-        const str = String(s.timestamp);
-        const match = str.match(/T?(\d{2}):(\d{2})/);
-        if (match) {
-          hours = parseInt(match[1], 10);
-          mins = parseInt(match[2], 10);
-        } else {
-          const d = new Date(s.timestamp);
-          hours = d.getHours();
-          mins = d.getMinutes();
-        }
-      }
-      const slotTime = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
-      return {
-        ...s,
-        minutes: hours * 60 + mins,
-        timeStr: slotTime,
-      };
-    });
-
-    const replayData = [];
-
-    for (const slot of timeSlots) {
-      const slotMin = timeToMinutes(slot);
-
-      // Bucket Strategy: Find the closest snapshot with timestamp <= slotMin (or nearest within interval window)
-      let matchedSnapshot = null;
-      let minDistance = Infinity;
-
-      for (const s of snapshotList) {
-        const diff = Math.abs(s.minutes - slotMin);
-        if (diff < minDistance) {
-          minDistance = diff;
-          matchedSnapshot = s;
-        }
-      }
-
-      // If matched snapshot is within a reasonable tolerance
-      if (matchedSnapshot && minDistance <= Math.max(30, timeFrame * 2)) {
-        const underlyingPrice = parseFloat(matchedSnapshot.underlying_price) || 0;
-        const rawOptions = matchedSnapshot.options || [];
-
-        // Group into strikes
-        const strikesMap = new Map();
-        for (const opt of rawOptions) {
-          const sPrice = parseFloat(opt.strike_price);
-          if (isNaN(sPrice)) continue;
-
-          if (!strikesMap.has(sPrice)) {
-            strikesMap.set(sPrice, { strikePrice: sPrice, ce: null, pe: null });
-          }
-
-          const entry = strikesMap.get(sPrice);
-          const type = (opt.option_type || '').toUpperCase();
-          const optDetails = {
-            oi: parseInt(opt.oi, 10) || 0,
-            changeOI: parseInt(opt.change_oi, 10) || 0,
-            ltp: parseFloat(opt.ltp) || 0,
-            change: parseFloat(opt.change) || 0,
-            volume: parseInt(opt.volume, 10) || 0,
-            iv: parseFloat(opt.iv) || 0,
-          };
-
-          if (type === 'CE') entry.ce = optDetails;
-          else if (type === 'PE') entry.pe = optDetails;
-        }
-
-        const strikesList = Array.from(strikesMap.values()).sort((a, b) => a.strikePrice - b.strikePrice);
-        const availableStrikes = strikesList.map((s) => s.strikePrice);
-        const atmStrike = calculateATMStrike(underlyingPrice, strikeStep, availableStrikes);
-
-        const { pcr, averagePCR, totalCallOI, totalPutOI } = calculateSnapshotPCR(
-          strikesList,
-          atmStrike,
-          strikeRange
-        );
-
-        replayData.push({
-          timestamp: slot,
-          niftyPrice: underlyingPrice,
-          atmStrike,
-          pcr,
-          averagePCR,
-          totalCallOI,
-          totalPutOI,
-          optionChain: strikesList,
-        });
-      }
-    }
-
-    if (replayData.length > 0) {
-      return {
-        success: true,
-        source: 'database',
-        symbol: upper,
-        date: dateStr,
-        expiry: expiryISO || expiryStr || null,
-        timeFrame,
+  // If specific expiry returned 0 rows, check if snapshots exist for this date under any/null expiry
+  if ((!snapshots || snapshots.length === 0) && expiryISO && indexRecord?.id) {
+    try {
+      const anySnaps = await models.getHistoricalSnapshotsByRange(
+        indexRecord.id,
+        dateStr,
+        null,
         startTime,
-        endTime,
-        totalIntervals: replayData.length,
-        data: replayData,
-      };
+        endTime
+      );
+      if (anySnaps && anySnaps.length > 0) {
+        snapshots = anySnaps;
+      }
+    } catch (e) {}
+  }
+
+  // If no snapshots exist in PostgreSQL, return empty dataset (NO static or simulated data)
+  if (!snapshots || snapshots.length === 0) {
+    return {
+      success: true,
+      source: 'database',
+      symbol: upper,
+      date: dateStr,
+      expiry: expiryISO || expiryStr || null,
+      timeFrame,
+      startTime,
+      endTime,
+      totalIntervals: 0,
+      data: [],
+      message: `No snapshot records found in PostgreSQL database for ${upper} on ${dateStr}`,
+    };
+  }
+
+  console.log(`📈 [Historical Replay] Loaded ${snapshots.length} real snapshots from PostgreSQL for ${upper} on ${dateStr} (expiry: ${expiryISO || 'ALL'})`);
+
+  // Map each snapshot with IST time
+  const snapshotList = [];
+  for (const s of snapshots) {
+    let hours = 9;
+    let mins = 15;
+    if (s.timestamp) {
+      const d = new Date(s.timestamp);
+      const timeStr = d.toLocaleTimeString('en-GB', {
+        timeZone: 'Asia/Kolkata',
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      const parts = timeStr.split(':').map(Number);
+      hours = parts[0];
+      mins = parts[1];
+    }
+    const minutes = hours * 60 + mins;
+    if (minutes >= startMinutes && minutes <= endMinutes) {
+      const slotTime = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+      snapshotList.push({
+        ...s,
+        minutes,
+        timeStr: slotTime,
+      });
     }
   }
 
-  // If after querying and seeding no records could be formed:
+  if (snapshotList.length === 0) {
+    return {
+      success: true,
+      source: 'database',
+      symbol: upper,
+      date: dateStr,
+      expiry: expiryISO || expiryStr || null,
+      timeFrame,
+      startTime,
+      endTime,
+      totalIntervals: 0,
+      data: [],
+      message: `No snapshots within requested trading hours (${startTime} - ${endTime}) for ${upper} on ${dateStr}`,
+    };
+  }
+
+  // Group / bucket snapshots by timeFrame (e.g. 1m, 3m, 5m)
+  // Each bucket takes the latest snapshot recorded in that interval window.
+  // Never creates duplicate filler copies across empty time periods.
+  const bucketMap = new Map();
+  for (const snap of snapshotList) {
+    let bucketKey;
+    if (timeFrame <= 1) {
+      bucketKey = snap.timeStr;
+    } else {
+      const offset = snap.minutes - startMinutes;
+      const bucketIndex = Math.floor(offset / timeFrame);
+      const bucketMinute = startMinutes + bucketIndex * timeFrame;
+      bucketKey = minutesToTime(bucketMinute);
+    }
+    // Retain latest snapshot in each bucket
+    bucketMap.set(bucketKey, snap);
+  }
+
+  const sortedBucketKeys = Array.from(bucketMap.keys()).sort((a, b) => timeToMinutes(a) - timeToMinutes(b));
+  const replayData = [];
+
+  for (const key of sortedBucketKeys) {
+    const snap = bucketMap.get(key);
+    const underlyingPrice = parseFloat(snap.underlying_price) || 0;
+    const rawOptions = snap.options || [];
+
+    const strikesMap = new Map();
+    for (const opt of rawOptions) {
+      if (!opt || opt.strike_price === null || opt.strike_price === undefined) continue;
+      const sPrice = parseFloat(opt.strike_price);
+      if (isNaN(sPrice)) continue;
+
+      if (!strikesMap.has(sPrice)) {
+        strikesMap.set(sPrice, { strikePrice: sPrice, ce: null, pe: null });
+      }
+
+      const entry = strikesMap.get(sPrice);
+      const type = (opt.option_type || '').toUpperCase();
+      const optDetails = {
+        oi: parseInt(opt.oi, 10) || 0,
+        changeOI: parseInt(opt.change_oi, 10) || 0,
+        ltp: parseFloat(opt.ltp) || 0,
+        change: parseFloat(opt.change) || 0,
+        volume: parseInt(opt.volume, 10) || 0,
+        iv: parseFloat(opt.iv) || 0,
+      };
+
+      if (type === 'CE') entry.ce = optDetails;
+      else if (type === 'PE') entry.pe = optDetails;
+    }
+
+    const strikesList = Array.from(strikesMap.values()).sort((a, b) => a.strikePrice - b.strikePrice);
+    const availableStrikes = strikesList.map((s) => s.strikePrice);
+    const atmStrike = calculateATMStrike(underlyingPrice, strikeStep, availableStrikes);
+
+    const { pcr, averagePCR, totalCallOI, totalPutOI } = calculateSnapshotPCR(
+      strikesList,
+      atmStrike,
+      strikeRange
+    );
+
+    replayData.push({
+      timestamp: key,
+      niftyPrice: underlyingPrice,
+      atmStrike,
+      pcr,
+      averagePCR,
+      totalCallOI,
+      totalPutOI,
+      optionChain: strikesList,
+    });
+  }
+
+  // Determine detected expiry from database snapshot
+  let detectedExpiry = expiryISO || expiryStr || null;
+  if (!detectedExpiry && snapshots.length > 0 && snapshots[0].expiry_date) {
+    detectedExpiry = new Date(snapshots[0].expiry_date).toISOString().slice(0, 10);
+  }
+
   return {
     success: true,
     source: 'database',
     symbol: upper,
     date: dateStr,
-    expiry: expiryISO || expiryStr || null,
+    expiry: detectedExpiry,
     timeFrame,
     startTime,
     endTime,
-    totalIntervals: 0,
-    data: [],
-    message: `No snapshot records found in PostgreSQL database for ${upper} on ${dateStr}`,
+    totalIntervals: replayData.length,
+    data: replayData,
   };
 };
 
@@ -735,7 +529,6 @@ module.exports = {
   getHistoricalReplay,
   getAvailableDates,
   getAvailableExpiries,
-  seedHistoricalDateToDB,
   validateTradingDate,
   findNearestTradingDate,
 };

@@ -121,6 +121,7 @@ export class AutoSyncController {
   public switchToManualReplay(): void {
     if (this.mode() !== 'MANUAL_REPLAY') {
       this.mode.set('MANUAL_REPLAY');
+      this.replayController.enforceLiveCeiling.set(false);
     }
   }
 
@@ -132,6 +133,7 @@ export class AutoSyncController {
   public resumeLiveSync(): void {
     this.replayController.pause(false);
     this.mode.set('LIVE_SYNC');
+    this.replayController.enforceLiveCeiling.set(true);
     this.syncHistoricalToLive(new Date());
   }
 
