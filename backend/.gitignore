@@ -1,0 +1,4 @@
+powershell.bat
+powershell.cmd
+node_modules/
+.env

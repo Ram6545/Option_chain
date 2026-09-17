@@ -59,7 +59,7 @@ export class HistoricalDataStore {
     return map;
   });
 
-  readonly currentTimestamp = computed(() => this.currentFrame()?.timestamp ?? '09:15');
+  readonly currentTimestamp = computed(() => this.currentFrame()?.timestamp ?? '--:--');
   readonly currentSpot = computed(() => this.currentFrame()?.niftyPrice ?? 0);
   readonly currentATM = computed(() => this.currentFrame()?.atmStrike ?? 0);
   readonly currentPCR = computed(() => this.currentFrame()?.pcr ?? 0);

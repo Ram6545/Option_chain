@@ -35,12 +35,21 @@ export class ReplayController {
 
   constructor(private dataStore: HistoricalDataStore) {}
 
+  // Whether to enforce live ceiling clamp (only true during real-time LIVE_SYNC mode)
+  public enforceLiveCeiling = signal<boolean>(false);
+
   /**
    * Get maximum allowed snapshot index based on current market session.
-   * Prevents advancing into future snapshots.
+   * If enforceLiveCeiling is true, caps at current live market session.
+   * Otherwise in manual mode or for past sessions, allows full session playback.
    */
   public getMaxAllowedIndex(): number {
-    return getMaxAllowedIndex(this.dataStore.availableTimestamps(), new Date());
+    const total = this.dataStore.totalFrames();
+    if (total === 0) return 0;
+    if (this.enforceLiveCeiling()) {
+      return getMaxAllowedIndex(this.dataStore.availableTimestamps(), new Date());
+    }
+    return total - 1;
   }
 
   /**

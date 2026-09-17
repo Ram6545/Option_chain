@@ -7,6 +7,7 @@ const db = require('./config/db');
 const models = require('./models');
 const historicalReplayService = require('./services/historicalReplayService');
 const expiryCycleService = require('./services/expiryCycleService');
+const backgroundCollectorService = require('./services/backgroundCollectorService');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -1525,9 +1526,45 @@ app.get('/api/underlying/:symbol/history', async (req, res) => {
   }
 });
 
+// 11. Autonomous Background Data Collector Endpoints
+app.get('/api/collector/status', (req, res) => {
+  res.json({ success: true, data: backgroundCollectorService.getStatus() });
+});
+
+app.post('/api/collector/trigger', async (req, res) => {
+  try {
+    await backgroundCollectorService.collectCycle('MANUAL_TRIGGER');
+    res.json({
+      success: true,
+      message: 'Background collection cycle triggered',
+      data: backgroundCollectorService.getStatus(),
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/collector/start', (req, res) => {
+  backgroundCollectorService.start();
+  res.json({ success: true, message: 'Collector started', data: backgroundCollectorService.getStatus() });
+});
+
+app.post('/api/collector/stop', (req, res) => {
+  backgroundCollectorService.stop();
+  res.json({ success: true, message: 'Collector stopped', data: backgroundCollectorService.getStatus() });
+});
+
 const server = app.listen(PORT, () => {
   console.log(`🚀 Option Chain Backend running on http://localhost:${PORT}`);
   console.log(`📡 Real-time live NSE v3 API connected: type=Indices/Equities & symbol & expiry supported`);
+
+  // Initialize autonomous background collector (records data every 60s during market hours)
+  backgroundCollectorService.init({
+    getOptionChain,
+    expiryCycleService,
+    intervalMs: parseInt(process.env.COLLECTOR_INTERVAL_MS, 10) || 60000,
+    symbols: ['NIFTY', 'BANKNIFTY'],
+  });
 });
 
 server.on('error', (err) => {

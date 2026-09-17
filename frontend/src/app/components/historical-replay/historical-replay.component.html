@@ -47,7 +47,7 @@
       <div class="stamp-chip active-expiry-chip">
         <mat-icon class="clock-icon">event_available</mat-icon>
         <span class="chip-label">EXPIRY</span>
-        <span class="chip-value">{{ activeExpiry() }}</span>
+        <span class="chip-value">{{ activeExpiry() || selectedExpiry() || 'All Expiries' }}</span>
       </div>
     </div>
   </div>
@@ -80,7 +80,7 @@
         <span class="config-summary-pills" *ngIf="isConfigCollapsed()">
           <span class="summary-pill highlight">{{ symbol() }}</span>
           <span class="summary-pill">{{ formattedHistoricalDate() }}</span>
-          <span class="summary-pill">Expiry: {{ activeExpiry() }}</span>
+          <span class="summary-pill">Expiry: {{ activeExpiry() || selectedExpiry() || 'All' }}</span>
           <span class="summary-pill">{{ timeFrame() }}m Frame</span>
           <span class="summary-pill">&plusmn;{{ strikeRange() }} Strikes</span>
         </span>
@@ -117,7 +117,7 @@
             <mat-select [value]="selectedDate()" (selectionChange)="onDateChange($event.value)" [disabled]="isPlaying()">
               @for (d of availableDates(); track d) {
                 <mat-option [value]="d">
-                  {{ d }} (Database)
+                  {{ d === todayISODate ? d + ' (Today)' : d + ' (Database)' }}
                 </mat-option>
               }
             </mat-select>
