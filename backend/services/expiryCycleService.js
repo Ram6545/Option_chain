@@ -271,6 +271,11 @@ const saveSnapshotWithCycle = async (symbol = 'NIFTY', chainData = {}) => {
     pcr,
   });
 
+  if (!snapshot || !snapshot.id) {
+    console.warn(`⚠️ [ExpiryCycleService] Snapshot could not be retrieved/saved for ${upper}`);
+    return null;
+  }
+
   // Prepare Option Contracts
   const optionRows = [];
   const strikes = chainData.strikes || [];

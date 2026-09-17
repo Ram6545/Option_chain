@@ -152,6 +152,11 @@ const createSnapshot = async (snapshotData) => {
     `INSERT INTO option_chain_snapshots 
       (index_id, underlying_price, timestamp, trading_date, expiry_date, status, is_active_cycle, atm_strike, pcr)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     ON CONFLICT (index_id, COALESCE(expiry_date, '1970-01-01'::date), timestamp)
+     DO UPDATE SET 
+       underlying_price = EXCLUDED.underlying_price,
+       atm_strike = EXCLUDED.atm_strike,
+       pcr = EXCLUDED.pcr
      RETURNING id, index_id, underlying_price, timestamp, trading_date, expiry_date, status, is_active_cycle, atm_strike, pcr, created_at`,
     [
       indexId,
@@ -165,7 +170,7 @@ const createSnapshot = async (snapshotData) => {
       pcr,
     ]
   );
-  return result.rows[0];
+  return result?.rows?.[0] || null;
 };
 
 /**
@@ -175,7 +180,7 @@ const createSnapshot = async (snapshotData) => {
  * @returns {Promise<void>}
  */
 const insertOptionChainData = async (snapshotId, options) => {
-  if (!options || options.length === 0) return;
+  if (!snapshotId || !options || options.length === 0) return;
 
   const chunkSize = 25;
   for (let i = 0; i < options.length; i += chunkSize) {
