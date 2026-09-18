@@ -400,14 +400,14 @@
     <!-- Timeline Scrubber Track -->
     <div class="timeline-container">
       <div class="timeline-markers">
-        <span class="marker">09:15</span>
-        <span class="marker">10:00</span>
-        <span class="marker">11:00</span>
-        <span class="marker">12:00</span>
-        <span class="marker">13:00</span>
-        <span class="marker">14:00</span>
-        <span class="marker">15:00</span>
-        <span class="marker">15:30</span>
+        <div
+          *ngFor="let m of timelineMarkers()"
+          class="marker"
+          [style.left.%]="m.percent"
+        >
+          <span class="marker-label">{{ m.label }}</span>
+          <span class="marker-tick"></span>
+        </div>
       </div>
 
       <div class="timeline-slider-wrapper">
@@ -415,23 +415,45 @@
           type="range"
           class="timeline-range-input"
           [min]="0"
-          [max]="maxAllowedSliderIndex()"
-          [value]="currentIndex()"
-          (input)="onSliderInput($event)"
+          [max]="timelineTotalMinutes()"
+          [value]="currentElapsedMinutes()"
+          (input)="onTimelineSliderInput($event)"
           [disabled]="totalFrames() === 0"
+          [attr.aria-label]="'Historical Time Scrubber: ' + currentTimestamp()"
         />
-        <div class="timeline-progress-fill" [style.width.%]="progressPercent()"></div>
+        <div class="timeline-progress-fill" [style.width]="thumbLeftStyle()"></div>
+
+        <!-- Floating Scrubber Play Line Time Badge -->
+        <div
+          class="timeline-thumb-badge"
+          [style.left]="thumbLeftStyle()"
+          *ngIf="totalFrames() > 0 && currentTimestamp()"
+        >
+          {{ currentTimestamp() }}
+        </div>
+
+        <!-- Live Ceiling Marker when viewing Today's session in progress -->
+        <div
+          class="timeline-live-marker"
+          *ngIf="isTodaySelected() && sessionProgressPercent() < 100"
+          [style.left]="liveCeilingLeftStyle()"
+          [matTooltip]="'Real-world Live Ceiling: ' + liveClock().timeStr"
+        >
+          <span class="live-pin"></span>
+        </div>
       </div>
 
       <div class="timeline-status-row">
-        <span class="timeline-start">Market Open: 09:15 AM</span>
+        <span class="timeline-start">Session Start: {{ startTime() }}</span>
         <div class="timeline-session-meter">
           <span class="meter-label">Session Progress: {{ sessionProgressPercent() }}%</span>
           <div class="meter-bar">
             <div class="meter-fill" [style.width.%]="sessionProgressPercent()"></div>
           </div>
         </div>
-        <span class="timeline-end">Current Live Ceiling: {{ liveClock().timeStr }}</span>
+        <span class="timeline-end">
+          {{ isTodaySelected() ? ('Current Live Ceiling: ' + liveClock().timeStr) : ('Session End: ' + endTime()) }}
+        </span>
       </div>
     </div>
   </mat-card>

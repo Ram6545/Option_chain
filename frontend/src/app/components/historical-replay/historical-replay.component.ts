@@ -39,6 +39,10 @@ import {
   formatDisplayDate,
   toISODateString,
   timeToMinutes,
+  minutesToTime,
+  MARKET_OPEN_MINUTES,
+  MARKET_CLOSE_MINUTES,
+  findClosestHistoricalSnapshot,
 } from '../../services/replay';
 
 export interface PctChangeResult {
@@ -152,6 +156,7 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
   currentStrikes = this.dataStore.currentStrikes;
   totalCallOI = this.dataStore.totalCallOI;
   totalPutOI = this.dataStore.totalPutOI;
+  availableTimestamps = this.dataStore.availableTimestamps;
 
   // Top 2 Highlights
   callOITop2 = this.dataStore.callOITop2;
@@ -230,11 +235,79 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
   // Display strings
   formattedHistoricalDate = computed(() => formatDisplayDate(this.selectedDate()));
 
-  // Timeline Progress percentage (0 to 100)
+  // Timeline Boundary Minutes based on configured startTime and endTime
+  timelineStartMinutes = computed(() => {
+    return timeToMinutes(this.startTime()) || MARKET_OPEN_MINUTES;
+  });
+
+  timelineEndMinutes = computed(() => {
+    return timeToMinutes(this.endTime()) || MARKET_CLOSE_MINUTES;
+  });
+
+  timelineTotalMinutes = computed(() => {
+    return Math.max(1, this.timelineEndMinutes() - this.timelineStartMinutes());
+  });
+
+  // Current session elapsed minutes from timeline start
+  currentElapsedMinutes = computed(() => {
+    const ts = this.currentTimestamp();
+    if (!ts) return 0;
+    const curMin = timeToMinutes(ts);
+    const startMin = this.timelineStartMinutes();
+    return Math.max(0, Math.min(this.timelineTotalMinutes(), curMin - startMin));
+  });
+
+  // Timeline Progress percentage (0 to 100) mapped to actual session time
   progressPercent = computed(() => {
-    const total = this.totalFrames();
-    if (total <= 1) return 0;
-    return (this.currentIndex() / (total - 1)) * 100;
+    const total = this.timelineTotalMinutes();
+    if (total <= 0) return 0;
+    return (this.currentElapsedMinutes() / total) * 100;
+  });
+
+  // Sub-pixel CSS offset accounting for native range thumb radius (20px)
+  thumbLeftStyle = computed(() => {
+    return `calc(10px + (${this.progressPercent()} * (100% - 20px) / 100))`;
+  });
+
+  liveCeilingLeftStyle = computed(() => {
+    return `calc(10px + (${this.sessionProgressPercent()} * (100% - 20px) / 100))`;
+  });
+
+  // Dynamically generated timeline markers matching exact hour marks and boundaries
+  timelineMarkers = computed(() => {
+    const start = this.timelineStartMinutes();
+    const end = this.timelineEndMinutes();
+    const total = Math.max(1, end - start);
+
+    const markers: { label: string; minutes: number; percent: number }[] = [];
+
+    // Start marker (e.g. 09:15)
+    markers.push({
+      label: minutesToTime(start),
+      minutes: start,
+      percent: 0,
+    });
+
+    // Hourly intermediate markers (e.g. 10:00, 11:00, 12:00, 13:00, 14:00, 15:00)
+    const firstHour = Math.ceil((start + 1) / 60) * 60;
+    for (let m = firstHour; m < end; m += 60) {
+      markers.push({
+        label: minutesToTime(m),
+        minutes: m,
+        percent: ((m - start) / total) * 100,
+      });
+    }
+
+    // End marker (e.g. 15:30)
+    if (end > start) {
+      markers.push({
+        label: minutesToTime(end),
+        minutes: end,
+        percent: 100,
+      });
+    }
+
+    return markers;
   });
 
   // Session progress percentage based on market clock
@@ -300,7 +373,7 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
           this.indices.set(res.data);
         }
       },
-      error: () => {},
+      error: () => { },
     });
   }
 
@@ -320,7 +393,7 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
           }
         }
       },
-      error: () => {},
+      error: () => { },
     });
   }
 
@@ -657,11 +730,37 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
     this.replayController.seekTo(clamped);
   }
 
-  onSliderInput(event: Event): void {
+  onTimelineSliderInput(event: Event): void {
     const target = event.target as HTMLInputElement;
-    if (target && target.value !== undefined) {
-      this.seekTo(parseInt(target.value, 10));
+    if (!target || target.value === undefined) return;
+    const elapsedMinutes = parseInt(target.value, 10);
+    const startMin = this.timelineStartMinutes();
+    let targetMin = startMin + elapsedMinutes;
+
+    // Guard on today's live session against scrubbing into future unrecorded minutes
+    if (this.isTodaySelected()) {
+      const liveMin = this.liveClock().minutes;
+      if (targetMin > liveMin) {
+        targetMin = liveMin;
+        this.snackBar.open(
+          `Market currently in session. Scrubber clamped to live ceiling (${this.liveClock().timeStr}).`,
+          'OK',
+          { duration: 2000 }
+        );
+      }
     }
+
+    const timestamps = this.availableTimestamps();
+    if (!timestamps || timestamps.length === 0) return;
+
+    const match = findClosestHistoricalSnapshot(timestamps, targetMin);
+    if (match && match.index >= 0) {
+      this.seekTo(match.index);
+    }
+  }
+
+  onSliderInput(event: Event): void {
+    this.onTimelineSliderInput(event);
   }
 
   changeSpeed(speed: number): void {

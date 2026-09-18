@@ -24,6 +24,7 @@ export interface LiveClockState {
   timeWithSeconds: string; // "HH:mm:ss"
   displayStr: string; // "09:32:15 AM"
   sessionState: SessionState;
+  minutes: number; // Total minutes from midnight (0..1439)
   elapsedMinutes: number; // 0 to 375
   progressPercent: number; // 0 to 100
   statusMessage: string; // e.g., "17 min after market open", "Market has not opened yet", "Market closed"
@@ -139,6 +140,7 @@ export function getLiveClockInfo(date: Date = new Date()): LiveClockState {
   const hours = date.getHours();
   const minutes = date.getMinutes();
   const seconds = date.getSeconds();
+  const totalMinutes = hours * 60 + minutes;
   const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
   const timeWithSeconds = `${timeStr}:${String(seconds).padStart(2, '0')}`;
   const displayStr = format12HourTime(date);
@@ -162,6 +164,7 @@ export function getLiveClockInfo(date: Date = new Date()): LiveClockState {
     timeWithSeconds,
     displayStr,
     sessionState,
+    minutes: totalMinutes,
     elapsedMinutes,
     progressPercent,
     statusMessage,

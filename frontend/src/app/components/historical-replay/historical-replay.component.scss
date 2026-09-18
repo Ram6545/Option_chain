@@ -919,21 +919,46 @@
   .timeline-container {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
 
     .timeline-markers {
-      display: flex;
-      justify-content: space-between;
-      font-size: 0.84rem;
+      position: relative;
+      height: 24px;
+      margin: 0 10px;
+      font-size: 0.82rem;
       color: #475569;
       font-family: monospace;
       font-weight: 700;
-      padding: 0 2px;
+
+      .marker {
+        position: absolute;
+        transform: translateX(-50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        white-space: nowrap;
+
+        .marker-label {
+          font-size: 0.78rem;
+          line-height: 1;
+          color: #475569;
+          font-weight: 700;
+        }
+
+        .marker-tick {
+          width: 1.5px;
+          height: 5px;
+          background: #94a3b8;
+          margin-top: 4px;
+          border-radius: 1px;
+        }
+      }
     }
 
     .timeline-slider-wrapper {
       position: relative;
-      height: 24px;
+      height: 26px;
+      margin-bottom: 14px;
       display: flex;
       align-items: center;
 
@@ -955,7 +980,7 @@
           border-radius: 50%;
           background: #0284c7;
           border: 2px solid #ffffff;
-          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+          box-shadow: 0 1px 5px rgba(0, 0, 0, 0.28);
           cursor: pointer;
           transition: transform 0.1s;
 
@@ -973,6 +998,59 @@
         border-radius: 4px;
         pointer-events: none;
         z-index: 1;
+      }
+
+      .timeline-thumb-badge {
+        position: absolute;
+        top: 22px;
+        left: 0;
+        transform: translateX(-50%);
+        background: #0284c7;
+        color: #ffffff;
+        font-size: 0.72rem;
+        font-weight: 700;
+        font-family: monospace;
+        padding: 1px 6px;
+        border-radius: 4px;
+        pointer-events: none;
+        white-space: nowrap;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        z-index: 5;
+        transition: left 0.05s linear;
+
+        &::after {
+          content: '';
+          position: absolute;
+          top: -4px;
+          left: 50%;
+          transform: translateX(-50%);
+          border-width: 0 4px 4px;
+          border-style: solid;
+          border-color: transparent transparent #0284c7;
+        }
+      }
+
+      .timeline-live-marker {
+        position: absolute;
+        top: 3px;
+        bottom: 3px;
+        width: 2px;
+        background: #10b981;
+        pointer-events: none;
+        z-index: 3;
+        transform: translateX(-50%);
+
+        .live-pin {
+          position: absolute;
+          top: -7px;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: #10b981;
+          box-shadow: 0 0 4px rgba(16, 185, 129, 0.7);
+        }
       }
     }
 
