@@ -334,6 +334,8 @@ export interface AggregatePCR {
 export interface StrikePCRAnalysisData {
   symbol: string;
   underlyingPrice: number;
+  marketOpenPrice?: number;
+  currentSpotPrice?: number;
   timestamp: string;
   selectedStrike: number;
   atmStrike: number;

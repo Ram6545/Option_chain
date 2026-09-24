@@ -53,13 +53,27 @@ let lastSessionTime = 0;
 const cache = new Map();
 const CACHE_TTL_MS = 2000;
 
-// Custom HTTPS Agent with IPv4 enforcement
+// Custom HTTPS Agent with modern browser TLS ciphers & clean connection lifecycle
 const httpsAgent = new https.Agent({
-  keepAlive: true,
-  maxSockets: 50,
+  keepAlive: false, // Prevents reusing stale/closed sockets dropped by Akamai CDN
   family: 4,
   timeout: 15000,
+  ciphers: [
+    'TLS_AES_128_GCM_SHA256',
+    'TLS_AES_256_GCM_SHA384',
+    'TLS_CHACHA20_POLY1305_SHA256',
+    'ECDHE-ECDSA-AES128-GCM-SHA256',
+    'ECDHE-RSA-AES128-GCM-SHA256',
+    'ECDHE-ECDSA-AES256-GCM-SHA384',
+    'ECDHE-RSA-AES256-GCM-SHA384',
+  ].join(':'),
+  honorCipherOrder: true,
+  minVersion: 'TLSv1.2',
 });
+
+// In-flight request deduplication and session initialization mutex
+const inflightRequests = new Map();
+let initSessionPromise = null;
 
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36';
@@ -206,58 +220,114 @@ const makeHttpsRequest = (targetUrl, customHeaders = {}, isApi = false) => {
 };
 
 /**
- * Initialize NSE Session cookies
+ * Initialize NSE Session cookies with concurrency locking
  */
 const initSession = async (force = false) => {
   if (!force && cookieStore.size >= 2 && Date.now() - lastSessionTime < 3 * 60 * 1000) {
     return;
   }
 
-  const sessionUrls = [
-    'https://www.nseindia.com/option-chain',
-    'https://www.nseindia.com/get-quotes/derivatives?symbol=NIFTY',
-    'https://www.nseindia.com',
-  ];
-
-  for (const url of sessionUrls) {
-    try {
-      const res = await makeHttpsRequest(url, {}, false);
-      if (res.statusCode === 200 || res.statusCode === 302 || res.statusCode === 304) {
-        lastSessionTime = Date.now();
-        if (cookieStore.size >= 2) break;
-      }
-    } catch (err) {
-      // continue
-    }
+  // Prevent multiple concurrent requests from spamming session endpoints
+  if (initSessionPromise) {
+    return initSessionPromise;
   }
+
+  initSessionPromise = (async () => {
+    try {
+      const sessionUrls = [
+        'https://www.nseindia.com/option-chain',
+        'https://www.nseindia.com/get-quotes/derivatives?symbol=NIFTY',
+        'https://www.nseindia.com',
+      ];
+
+      for (const url of sessionUrls) {
+        try {
+          const res = await makeHttpsRequest(url, {}, false);
+          if (res.statusCode === 200 || res.statusCode === 302 || res.statusCode === 304) {
+            lastSessionTime = Date.now();
+            if (cookieStore.size >= 2) break;
+          }
+        } catch (err) {
+          // continue to next candidate
+        }
+      }
+    } finally {
+      initSessionPromise = null;
+    }
+  })();
+
+  return initSessionPromise;
 };
 
 /**
- * Fetch JSON from NSE with retry
+ * Fetch JSON from NSE with concurrency deduplication & retry for ECONNRESET / network drops
  */
-const fetchNSEJson = async (url) => {
-  try {
-    await initSession();
-    let res = await makeHttpsRequest(url, {}, true);
-
-    if (res.statusCode === 401 || res.statusCode === 403) {
-      console.log(`🔄 Session invalid (${res.statusCode}), re-initializing cookies for ${url}...`);
-      cookieStore.clear();
-      await initSession(true);
-      res = await makeHttpsRequest(url, {}, true);
-    }
-
-    console.log('🌐 [NSE HTTP STATUS]:', res.statusCode, 'for', url);
-    if (res.statusCode !== 200 || !res.body) {
-      console.warn('⚠️ [NSE NON-200 STATUS]:', res.statusCode, 'body length:', res.body?.length);
-      return null;
-    }
-
-    return JSON.parse(res.body);
-  } catch (err) {
-    console.warn(`⚠️ NSE API fetch warning for ${url}: ${err.message}`);
-    return null;
+const fetchNSEJson = async (url, retryCount = 0) => {
+  // Deduplicate in-flight requests for identical URLs
+  if (inflightRequests.has(url)) {
+    return inflightRequests.get(url);
   }
+
+  const task = (async () => {
+    try {
+      await initSession();
+      let res = await makeHttpsRequest(url, {}, true);
+
+      if (res.statusCode === 401 || res.statusCode === 403) {
+        console.log(`🔄 Session invalid (${res.statusCode}), re-initializing cookies for ${url}...`);
+        cookieStore.clear();
+        await initSession(true);
+        res = await makeHttpsRequest(url, {}, true);
+      }
+
+      console.log('🌐 [NSE HTTP STATUS]:', res.statusCode, 'for', url);
+      if (res.statusCode !== 200 || !res.body) {
+        console.warn('⚠️ [NSE NON-200 STATUS]:', res.statusCode, 'body length:', res.body?.length);
+        return null;
+      }
+
+      return JSON.parse(res.body);
+    } catch (err) {
+      // Automatic recovery on ECONNRESET, socket hang up, or timeout
+      const isTransient =
+        err.code === 'ECONNRESET' ||
+        err.message?.includes('ECONNRESET') ||
+        err.message?.includes('socket hang up') ||
+        err.code === 'ETIMEDOUT' ||
+        err.code === 'EPIPE';
+
+      if (retryCount < 2 && isTransient) {
+        console.warn(`🔄 NSE connection reset (${err.message}). Retrying in 600ms (attempt ${retryCount + 1}/2)...`);
+        cookieStore.clear();
+        await new Promise((r) => setTimeout(r, 600));
+        await initSession(true);
+        return fetchNSEJson(url, retryCount + 1);
+      }
+
+      console.warn(`⚠️ NSE API fetch warning for ${url}: ${err.message}`);
+      return null;
+    } finally {
+      inflightRequests.delete(url);
+    }
+  })();
+
+  inflightRequests.set(url, task);
+  return task;
+};
+
+/**
+ * Cache contract-info (expiry dates & metadata) for 5 minutes
+ */
+const getContractInfo = async (upper) => {
+  const cacheKey = `contract-info:${upper}`;
+  if (cache.has(cacheKey) && Date.now() - cache.get(cacheKey).time < 5 * 60 * 1000) {
+    return cache.get(cacheKey).data;
+  }
+  const info = await fetchNSEJson(`https://www.nseindia.com/api/option-chain-contract-info?symbol=${encodeURIComponent(upper)}`);
+  if (info) {
+    cache.set(cacheKey, { data: info, time: Date.now() });
+  }
+  return info;
 };
 
 const isIndexSymbol = (symbol) => {
@@ -444,7 +514,7 @@ const getOptionChain = async (symbol, expiry = null) => {
   // If no expiry is provided, auto-resolve the nearest active expiry from contract-info
   if (!trimmedExpiry) {
     try {
-      const contractInfo = await fetchNSEJson(`https://www.nseindia.com/api/option-chain-contract-info?symbol=${encodeURIComponent(upper)}`);
+      const contractInfo = await getContractInfo(upper);
       if (contractInfo?.expiryDates && contractInfo.expiryDates.length > 0) {
         const validExpiries = contractInfo.expiryDates.filter(isCurrentOrFutureExpiry);
         trimmedExpiry = validExpiries[0] || contractInfo.expiryDates[0];
@@ -931,7 +1001,7 @@ app.get('/api/strike-prices/:symbol/expiries', async (req, res) => {
     } catch (e) { }
 
     if (!expiries || expiries.length === 0) {
-      const contractInfo = await fetchNSEJson(`https://www.nseindia.com/api/option-chain-contract-info?symbol=${encodeURIComponent(upper)}`);
+      const contractInfo = await getContractInfo(upper);
       if (contractInfo?.expiryDates && contractInfo.expiryDates.length > 0) {
         expiries = contractInfo.expiryDates.filter(isCurrentOrFutureExpiry);
       }
@@ -1080,13 +1150,12 @@ app.post('/api/option-chain/:symbol/refresh', async (req, res) => {
 // 8. Strike PCR Analysis
 app.get('/api/option-chain/:symbol/pcr-analysis', async (req, res) => {
   const { symbol } = req.params;
-  const { selectedStrike, strikeRange, expiry } = req.query;
+  const { selectedStrike, strikeRange, expiry, marketOpenPrice, preMarketOpen } = req.query;
   const upper = (symbol || 'NIFTY').toUpperCase();
 
   try {
     const chain = await getOptionChain(symbol, expiry);
     const strikes = chain.strikes || [];
-    const underlyingPrice = chain.underlyingPrice || 0;
     const range = parseInt(strikeRange, 10) || 3;
     const sortedStrikes = strikes.map((s) => s.strikePrice);
 
@@ -1094,8 +1163,26 @@ app.get('/api/option-chain/:symbol/pcr-analysis', async (req, res) => {
       return res.status(404).json({ success: false, error: `No strike data available for ${symbol}` });
     }
 
-    const atmStrike = chain.atmStrike || sortedStrikes[0];
-    let targetStrike = selectedStrike ? parseFloat(selectedStrike) : atmStrike;
+    // Always pick market opening price at 9:15 AM first price (or user query override)
+    let openPrice = marketOpenPrice || preMarketOpen ? parseFloat(marketOpenPrice || preMarketOpen) : null;
+    if (!openPrice || isNaN(openPrice) || openPrice <= 0) {
+      openPrice = await models.getPreMarketOpen(upper);
+    }
+    if (!openPrice || isNaN(openPrice) || openPrice <= 0) {
+      openPrice = chain.underlyingPrice || sortedStrikes[Math.floor(sortedStrikes.length / 2)];
+    }
+
+    // Determine initial ATM Strike based on 9:15 AM Market Opening Price
+    const atmStrike = sortedStrikes.reduce((closest, s) =>
+      Math.abs(s - openPrice) < Math.abs(closest - openPrice) ? s : closest,
+      sortedStrikes[0]
+    );
+
+    // Initial selected strike: use user selection if provided, otherwise default to 9:15 AM ATM strike
+    let targetStrike = selectedStrike !== undefined && selectedStrike !== '' && !isNaN(parseFloat(selectedStrike))
+      ? parseFloat(selectedStrike)
+      : atmStrike;
+
     let selectedIdx = sortedStrikes.indexOf(targetStrike);
 
     if (selectedIdx === -1) {
@@ -1161,36 +1248,13 @@ app.get('/api/option-chain/:symbol/pcr-analysis', async (req, res) => {
       }
     }
 
-    let preOpen = req.query.preMarketOpen ? parseFloat(req.query.preMarketOpen) : null;
-    if (!preOpen || isNaN(preOpen)) {
-      preOpen = await models.getPreMarketOpen(upper);
-    }
-    if (!preOpen || isNaN(preOpen)) {
-      preOpen = chain.underlyingPrice || null;
-    }
-
-    let preAtm = sortedStrikes.find((s) => s >= preOpen);
-    if (preAtm === undefined) preAtm = sortedStrikes[sortedStrikes.length - 1];
-    let preAtmIdx = sortedStrikes.indexOf(preAtm);
-    const pStart = Math.max(0, preAtmIdx - range);
-    const pEnd = Math.min(sortedStrikes.length - 1, preAtmIdx + range);
-    const preSelectedStrikes = sortedStrikes.slice(pStart, pEnd + 1);
-
-    let pCallOI = 0, pPutOI = 0;
-    for (const sVal of preSelectedStrikes) {
-      const obj = strikes.find((s) => s.strikePrice === sVal);
-      if (obj) {
-        pCallOI += obj.ce?.oi || 0;
-        pPutOI += obj.pe?.oi || 0;
-      }
-    }
-    const preAvgPCR = pCallOI > 0 ? parseFloat((pPutOI / pCallOI).toFixed(2)) : 0;
-
     res.json({
       success: true,
       data: {
         symbol: chain.symbol,
-        underlyingPrice,
+        underlyingPrice: openPrice,
+        marketOpenPrice: openPrice,
+        currentSpotPrice: chain.underlyingPrice || openPrice,
         timestamp: chain.timestamp,
         selectedStrike: targetStrike,
         atmStrike,
@@ -1209,13 +1273,10 @@ app.get('/api/option-chain/:symbol/pcr-analysis', async (req, res) => {
           interpretation,
         },
         preMarket: {
-          preMarketOpen: preOpen,
-          atmStrike: preAtm,
-          strikeRange: range,
-          selectedStrikes: preSelectedStrikes,
-          totalCallOI: pCallOI,
-          totalPutOI: pPutOI,
-          averagePCR: preAvgPCR,
+          openPrice,
+          atmStrike,
+          selectedStrikes: windowStrikes,
+          averagePCR: aggregatePcrOI,
         },
       },
     });
@@ -1256,13 +1317,15 @@ app.get('/api/option-chain/:symbol/pre-market-pcr', async (req, res) => {
 
     const sortedStrikes = strikes.map((s) => s.strikePrice).sort((a, b) => a - b);
 
-    // Rule: ATM strike is first strike >= openPrice (for 23,410 => 23,450)
+    // ATM strike is closest strike to 9:15 AM open price (e.g. for 23,457 => 23,450)
     let atmStrike = null;
     if (sortedStrikes.length > 0) {
-      const match = sortedStrikes.find((s) => s >= openPrice);
-      atmStrike = match !== undefined ? match : sortedStrikes[sortedStrikes.length - 1];
+      atmStrike = sortedStrikes.reduce((closest, s) =>
+        Math.abs(s - openPrice) < Math.abs(closest - openPrice) ? s : closest,
+        sortedStrikes[0]
+      );
     } else {
-      atmStrike = Math.ceil(openPrice / step) * step;
+      atmStrike = Math.round(openPrice / step) * step;
     }
 
     let atmIdx = sortedStrikes.indexOf(atmStrike);

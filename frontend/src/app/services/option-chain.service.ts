@@ -225,6 +225,8 @@ export class OptionChainService {
       strikeRange?: number;
       expiry?: string;
       live?: boolean;
+      preMarketOpen?: number;
+      marketOpenPrice?: number;
     }
   ): Observable<StrikePCRAnalysisResponse> {
     const queryParams: string[] = [];
@@ -239,6 +241,11 @@ export class OptionChainService {
     }
     if (options?.live !== undefined) {
       queryParams.push(`live=${options.live}`);
+    }
+    const openP = options?.marketOpenPrice ?? options?.preMarketOpen;
+    if (openP !== undefined && openP !== null) {
+      queryParams.push(`marketOpenPrice=${openP}`);
+      queryParams.push(`preMarketOpen=${openP}`);
     }
     const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
     return this.http.get<StrikePCRAnalysisResponse>(

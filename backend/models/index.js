@@ -525,108 +525,98 @@ const initializeDatabase = async () => {
  * @param {string} symbol
  * @returns {Promise<number|null>}
  */
-const getPreMarketOpen = async (symbol) => {
-  const upper = symbol.toUpperCase();
+const getPreMarketOpen = async (symbol, targetDate = null) => {
+  const upper = (symbol || 'NIFTY').toUpperCase();
   const index = await getIndexBySymbol(upper);
   if (!index) return null;
 
   try {
-    // 1. Check if opening price was recorded in pre_market_data for today
-    const todayRes = await db.query(
-      `SELECT pre_market_open FROM pre_market_data
-       WHERE index_id = $1 AND trade_date = CURRENT_DATE
-       ORDER BY id DESC
-       LIMIT 1`,
-      [index.id]
-    );
-    if (todayRes.rows.length > 0 && todayRes.rows[0].pre_market_open) {
-      return parseFloat(todayRes.rows[0].pre_market_open);
+    // 1. Resolve trading date: targetDate if given, otherwise the latest available trading date in snapshots/underlying_prices
+    let dateFilter = targetDate;
+    if (!dateFilter) {
+      const latestDateRes = await db.query(
+        `SELECT (timestamp AT TIME ZONE 'Asia/Kolkata')::date as trade_date
+         FROM option_chain_snapshots
+         WHERE index_id = $1
+         ORDER BY timestamp DESC
+         LIMIT 1`,
+        [index.id]
+      );
+      if (latestDateRes.rows.length > 0 && latestDateRes.rows[0].trade_date) {
+        dateFilter = latestDateRes.rows[0].trade_date;
+      }
     }
 
-    // 2. Query underlying_prices for the first price between 9:00 AM and 9:15 AM today
-    const openTimeRes = await db.query(
-      `SELECT price, timestamp FROM underlying_prices
-       WHERE index_id = $1
-         AND timestamp::date = CURRENT_DATE
-         AND timestamp::time >= '09:00:00'
-         AND timestamp::time <= '09:15:59'
-       ORDER BY timestamp ASC
-       LIMIT 1`,
-      [index.id]
-    );
-    if (openTimeRes.rows.length > 0 && openTimeRes.rows[0].price) {
-      const openPrice = parseFloat(openTimeRes.rows[0].price);
-      await upsertPreMarketOpen(upper, openPrice);
-      return openPrice;
-    }
-
-    // 3. Check option_chain_snapshots for the first price between 9:00 AM and 9:15 AM today
-    const snapOpenRes = await db.query(
+    // 2. Query option_chain_snapshots for the first price at or after 09:15:00 IST on that trading day
+    const snap915Res = await db.query(
       `SELECT underlying_price, timestamp FROM option_chain_snapshots
        WHERE index_id = $1
-         AND timestamp::date = CURRENT_DATE
-         AND timestamp::time >= '09:00:00'
-         AND timestamp::time <= '09:15:59'
+         ${dateFilter ? `AND (timestamp AT TIME ZONE 'Asia/Kolkata')::date = $2` : ''}
+         AND (timestamp AT TIME ZONE 'Asia/Kolkata')::time >= '09:15:00'
        ORDER BY timestamp ASC
        LIMIT 1`,
-      [index.id]
+      dateFilter ? [index.id, dateFilter] : [index.id]
     );
-    if (snapOpenRes.rows.length > 0 && snapOpenRes.rows[0].underlying_price) {
-      const openPrice = parseFloat(snapOpenRes.rows[0].underlying_price);
-      await upsertPreMarketOpen(upper, openPrice);
-      return openPrice;
+    if (snap915Res.rows.length > 0 && snap915Res.rows[0].underlying_price) {
+      const openPrice = parseFloat(snap915Res.rows[0].underlying_price);
+      if (openPrice > 0) return openPrice;
     }
 
-    // 4. Earliest tick today starting from 09:00:00
-    const earliestTodayRes = await db.query(
-      `SELECT price FROM underlying_prices
+    // 3. Query underlying_prices for the first price at or after 09:15:00 IST on that trading day
+    const price915Res = await db.query(
+      `SELECT price, timestamp FROM underlying_prices
        WHERE index_id = $1
-         AND timestamp::date = CURRENT_DATE
-         AND timestamp::time >= '09:00:00'
+         ${dateFilter ? `AND (timestamp AT TIME ZONE 'Asia/Kolkata')::date = $2` : ''}
+         AND (timestamp AT TIME ZONE 'Asia/Kolkata')::time >= '09:15:00'
        ORDER BY timestamp ASC
        LIMIT 1`,
-      [index.id]
+      dateFilter ? [index.id, dateFilter] : [index.id]
     );
-    if (earliestTodayRes.rows.length > 0 && earliestTodayRes.rows[0].price) {
-      return parseFloat(earliestTodayRes.rows[0].price);
+    if (price915Res.rows.length > 0 && price915Res.rows[0].price) {
+      const openPrice = parseFloat(price915Res.rows[0].price);
+      if (openPrice > 0) return openPrice;
     }
 
-    // 5. Check most recent trading day's opening price (9:00 - 9:15 AM)
-    const recentDayRes = await db.query(
-      `SELECT price FROM underlying_prices
-       WHERE index_id = $1
-         AND timestamp::time >= '09:00:00'
-         AND timestamp::time <= '09:15:59'
-       ORDER BY timestamp::date DESC, timestamp ASC
-       LIMIT 1`,
-      [index.id]
-    );
-    if (recentDayRes.rows.length > 0 && recentDayRes.rows[0].price) {
-      return parseFloat(recentDayRes.rows[0].price);
-    }
-
-    // 6. Check latest pre_market_data across any past date
-    const pastPreMarketRes = await db.query(
+    // 4. Check if opening price was recorded in pre_market_data for this trade date
+    const preMarketRes = await db.query(
       `SELECT pre_market_open FROM pre_market_data
        WHERE index_id = $1
-       ORDER BY trade_date DESC, id DESC
+         ${dateFilter ? `AND trade_date = $2` : ''}
+       ORDER BY id DESC
        LIMIT 1`,
-      [index.id]
+      dateFilter ? [index.id, dateFilter] : [index.id]
     );
-    if (pastPreMarketRes.rows.length > 0 && pastPreMarketRes.rows[0].pre_market_open) {
-      return parseFloat(pastPreMarketRes.rows[0].pre_market_open);
+    if (preMarketRes.rows.length > 0 && preMarketRes.rows[0].pre_market_open) {
+      const openPrice = parseFloat(preMarketRes.rows[0].pre_market_open);
+      if (openPrice > 0) return openPrice;
     }
 
-    // 7. Earliest recorded underlying price
-    const fallbackRes = await db.query(
-      `SELECT price FROM underlying_prices
+    // 5. Earliest snapshot recorded on that trade date
+    const earliestSnapRes = await db.query(
+      `SELECT underlying_price FROM option_chain_snapshots
        WHERE index_id = $1
+         ${dateFilter ? `AND (timestamp AT TIME ZONE 'Asia/Kolkata')::date = $2` : ''}
        ORDER BY timestamp ASC
        LIMIT 1`,
-      [index.id]
+      dateFilter ? [index.id, dateFilter] : [index.id]
     );
-    if (fallbackRes.rows.length > 0 && fallbackRes.rows[0].price) {
-      return parseFloat(fallbackRes.rows[0].price);
+    if (earliestSnapRes.rows.length > 0 && earliestSnapRes.rows[0].underlying_price) {
+      const openPrice = parseFloat(earliestSnapRes.rows[0].underlying_price);
+      if (openPrice > 0) return openPrice;
+    }
+
+    // 6. Earliest underlying_prices recorded on that trade date
+    const earliestPriceRes = await db.query(
+      `SELECT price FROM underlying_prices
+       WHERE index_id = $1
+         ${dateFilter ? `AND (timestamp AT TIME ZONE 'Asia/Kolkata')::date = $2` : ''}
+       ORDER BY timestamp ASC
+       LIMIT 1`,
+      dateFilter ? [index.id, dateFilter] : [index.id]
+    );
+    if (earliestPriceRes.rows.length > 0 && earliestPriceRes.rows[0].price) {
+      const openPrice = parseFloat(earliestPriceRes.rows[0].price);
+      if (openPrice > 0) return openPrice;
     }
   } catch (e) {
     console.warn('⚠️ Error in getPreMarketOpen:', e.message);

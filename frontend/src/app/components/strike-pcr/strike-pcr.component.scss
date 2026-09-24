@@ -91,6 +91,21 @@
       max-width: 160px;
     }
 
+    .open-price-field {
+      max-width: 175px;
+
+      .currency-prefix {
+        color: #0b5cab;
+        font-weight: 700;
+        font-size: 0.95rem;
+      }
+
+      input {
+        font-weight: 600;
+        color: #1e293b;
+      }
+    }
+
     .strike-field {
       min-width: 170px;
 

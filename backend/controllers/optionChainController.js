@@ -682,29 +682,31 @@ const getStrikePCRAnalysis = async (req, res, next) => {
       });
     }
 
+    // 1. Resolve 9:15 AM Market Opening Price (from query param or DB first tick >= 09:15:00 IST)
+    let openPrice = req.query.marketOpenPrice || req.query.preMarketOpen ? parseFloat(req.query.marketOpenPrice || req.query.preMarketOpen) : null;
+    if (!openPrice || isNaN(openPrice) || openPrice <= 0) {
+      openPrice = await models.getPreMarketOpen(upperSymbol);
+    }
+    if (!openPrice || isNaN(openPrice) || openPrice <= 0) {
+      openPrice = chain.underlyingPrice || null;
+    }
+
     const pcrAnalysis = oiAnalysisService.calculateStrikePCRAnalysis(
       chain,
       parsedStrike,
-      range
+      range,
+      openPrice
     );
 
-    // Also attach Pre-market ATM PCR calculation
-    let preOpen = req.query.preMarketOpen ? parseFloat(req.query.preMarketOpen) : null;
-    if (!preOpen || isNaN(preOpen)) {
-      preOpen = await models.getPreMarketOpen(upperSymbol);
-    }
-    if (!preOpen || isNaN(preOpen)) {
-      preOpen = chain.underlyingPrice || null;
-    }
-
-    const preMarketPCR = preOpen
-      ? oiAnalysisService.calculatePreMarketPCR(chain, preOpen, range)
+    const preMarketPCR = openPrice
+      ? oiAnalysisService.calculatePreMarketPCR(chain, openPrice, range)
       : null;
 
     res.json({
       success: true,
       data: {
         ...pcrAnalysis,
+        marketOpenPrice: openPrice,
         preMarket: preMarketPCR,
       },
     });

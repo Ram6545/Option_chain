@@ -21,9 +21,9 @@ const NSE_BASE_URL = process.env.NSE_API_BASE_URL || 'https://www.nseindia.com';
 const cookieStore = new Map();
 let lastSessionTime = 0;
 
-// Chrome TLS ciphers for Akamai / NSE WAF bypass
+// Chrome TLS ciphers for Akamai / NSE WAF bypass with clean socket lifecycle
 const httpsAgent = new https.Agent({
-  keepAlive: true,
+  keepAlive: false, // Prevents reusing stale/reset sockets dropped by Akamai CDN
   maxSockets: 50,
   family: 4,
   ciphers: [
@@ -38,6 +38,10 @@ const httpsAgent = new https.Agent({
   honorCipherOrder: true,
   minVersion: 'TLSv1.2',
 });
+
+// In-flight request deduplication and session initialization mutex
+const inflightRequests = new Map();
+let sessionInitPromise = null;
 
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36';
@@ -176,50 +180,102 @@ const makeHttpsRequest = (targetUrl, customHeaders = {}, isApi = false) => {
 };
 
 /**
- * Initialize / refresh session cookies from NSE pages.
+ * Initialize / refresh session cookies from NSE pages with mutex locking.
  */
 const initializeSession = async (force = false) => {
   if (!force && cookieStore.size >= 2 && Date.now() - lastSessionTime < 3 * 60 * 1000) {
     return;
   }
 
-  try {
-    await makeHttpsRequest(NSE_BASE_URL, {}, false);
-    const res = await makeHttpsRequest(`${NSE_BASE_URL}/option-chain`, {
-      Referer: `${NSE_BASE_URL}/`,
-    }, false);
-
-    if (res.statusCode === 200) {
-      lastSessionTime = Date.now();
-    }
-  } catch (err) {
-    console.warn('⚠️ Session handshake notice:', err.message);
+  if (sessionInitPromise) {
+    return sessionInitPromise;
   }
+
+  sessionInitPromise = (async () => {
+    try {
+      await makeHttpsRequest(NSE_BASE_URL, {}, false);
+      const res = await makeHttpsRequest(`${NSE_BASE_URL}/option-chain`, {
+        Referer: `${NSE_BASE_URL}/`,
+      }, false);
+
+      if (res.statusCode === 200) {
+        lastSessionTime = Date.now();
+      }
+    } catch (err) {
+      console.warn('⚠️ Session handshake notice:', err.message);
+    } finally {
+      sessionInitPromise = null;
+    }
+  })();
+
+  return sessionInitPromise;
 };
 
 /**
- * Perform authenticated request to NSE JSON endpoints.
+ * Perform authenticated request to NSE JSON endpoints with concurrency deduplication & retry.
  */
-const fetchNSEJson = async (url) => {
-  try {
-    await initializeSession();
-    let res = await makeHttpsRequest(url, {}, true);
-
-    if (res.statusCode === 401 || res.statusCode === 403) {
-      cookieStore.clear();
-      await initializeSession(true);
-      res = await makeHttpsRequest(url, {}, true);
-    }
-
-    if (res.statusCode !== 200 || !res.body) {
-      return null;
-    }
-
-    return JSON.parse(res.body);
-  } catch (error) {
-    console.warn(`⚠️ Error fetching NSE JSON for ${url}:`, error.message);
-    return null;
+const fetchNSEJson = async (url, retryCount = 0) => {
+  if (inflightRequests.has(url)) {
+    return inflightRequests.get(url);
   }
+
+  const task = (async () => {
+    try {
+      await initializeSession();
+      let res = await makeHttpsRequest(url, {}, true);
+
+      if (res.statusCode === 401 || res.statusCode === 403) {
+        cookieStore.clear();
+        await initializeSession(true);
+        res = await makeHttpsRequest(url, {}, true);
+      }
+
+      if (res.statusCode !== 200 || !res.body) {
+        return null;
+      }
+
+      return JSON.parse(res.body);
+    } catch (error) {
+      const isTransient =
+        error.code === 'ECONNRESET' ||
+        error.message?.includes('ECONNRESET') ||
+        error.message?.includes('socket hang up') ||
+        error.code === 'ETIMEDOUT' ||
+        error.code === 'EPIPE';
+
+      if (retryCount < 2 && isTransient) {
+        console.warn(`🔄 NSE API connection reset (${error.message}). Retrying in 600ms (attempt ${retryCount + 1}/2)...`);
+        cookieStore.clear();
+        await new Promise((r) => setTimeout(r, 600));
+        await initializeSession(true);
+        return fetchNSEJson(url, retryCount + 1);
+      }
+
+      console.warn(`⚠️ Error fetching NSE JSON for ${url}:`, error.message);
+      return null;
+    } finally {
+      inflightRequests.delete(url);
+    }
+  })();
+
+  inflightRequests.set(url, task);
+  return task;
+};
+
+/**
+ * Fetch and cache contract info (expiry dates) for 5 minutes
+ */
+const fetchContractInfo = async (upperSymbol) => {
+  const cacheKey = `nse:contract-info:${upperSymbol}`;
+  const cached = cache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < 5 * 60 * 1000) {
+    return cached.data;
+  }
+  const info = await fetchNSEJson(`${NSE_BASE_URL}/api/option-chain-contract-info?symbol=${encodeURIComponent(upperSymbol)}`);
+  if (info) {
+    cache.set(cacheKey, { data: info, timestamp: Date.now() });
+  }
+  return info;
 };
 
 const parseExpiryDate = (dateStr) => {
@@ -269,7 +325,7 @@ const getOptionChainData = async (symbol, expiry = null) => {
   // Auto-resolve nearest active expiry if not provided
   if (!trimmedExpiry) {
     try {
-      const contractInfo = await fetchNSEJson(`${NSE_BASE_URL}/api/option-chain-contract-info?symbol=${encodeURIComponent(upperSymbol)}`);
+      const contractInfo = await fetchContractInfo(upperSymbol);
       if (contractInfo?.expiryDates && contractInfo.expiryDates.length > 0) {
         const validExpiries = contractInfo.expiryDates.filter(isCurrentOrFutureExpiry);
         trimmedExpiry = validExpiries[0] || contractInfo.expiryDates[0];

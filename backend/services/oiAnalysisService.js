@@ -365,9 +365,11 @@ const analyzeATMConcentration = (data, underlyingPrice) => {
  * @param {number} strikeRange - Number of strikes on each side (default: 3)
  * @returns {Object} PCR analysis result with strike-level details and aggregate metrics
  */
-const calculateStrikePCRAnalysis = (optionChain, selectedStrike = null, strikeRange = 3) => {
+const calculateStrikePCRAnalysis = (optionChain, selectedStrike = null, strikeRange = 3, openPrice = null) => {
   const rawData = optionChain.data || [];
-  const underlyingPrice = parseFloat(optionChain.underlyingPrice) || 0;
+  const underlyingPrice = openPrice && !isNaN(parseFloat(openPrice)) && parseFloat(openPrice) > 0
+    ? parseFloat(openPrice)
+    : (parseFloat(optionChain.underlyingPrice) || 0);
   const range = Math.max(1, parseInt(strikeRange, 10) || 3);
 
   // Group CE and PE by strike price
@@ -630,18 +632,15 @@ const calculatePreMarketPCR = (optionChain, preMarketOpen, strikeRange = 3, conf
     }
   }
 
-  // 2. Determine ATM Strike from Pre-market Open
-  // Rule: first strike >= openPrice (e.g. for 23,410 with step 50, first strike >= 23,410 is 23,450)
+  // 2. Determine ATM Strike from Pre-market Open (closest strike to openPrice)
   let atmStrike = null;
   if (sortedStrikes.length > 0) {
-    const match = sortedStrikes.find((s) => s >= openPrice);
-    if (match !== undefined) {
-      atmStrike = match;
-    } else {
-      atmStrike = sortedStrikes[sortedStrikes.length - 1];
-    }
+    atmStrike = sortedStrikes.reduce((closest, s) =>
+      Math.abs(s - openPrice) < Math.abs(closest - openPrice) ? s : closest,
+      sortedStrikes[0]
+    );
   } else {
-    atmStrike = Math.ceil(openPrice / step) * step;
+    atmStrike = Math.round(openPrice / step) * step;
   }
 
   // If sortedStrikes is empty, return structured fallback

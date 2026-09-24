@@ -20,6 +20,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatInputModule } from '@angular/material/input';
 import { Subscription, interval } from 'rxjs';
 
 import { OptionChainService } from '../../services/option-chain.service';
@@ -39,6 +40,7 @@ import {
     MatCardModule,
     MatSelectModule,
     MatFormFieldModule,
+    MatInputModule,
     MatButtonModule,
     MatIconModule,
     MatProgressSpinnerModule,
@@ -63,6 +65,7 @@ export class StrikePcrComponent implements OnInit, OnDestroy {
 
   selectedSymbol = signal<string>('NIFTY');
   selectedStrike = signal<number | null>(null);
+  marketOpenPrice = signal<number | null>(null);
   strikeRange = signal<number>(3); // Configurable: 3 strikes on each side by default (7 total)
   selectedExpiry = signal<string | null>(null);
   isLiveMode = signal<boolean>(false);
@@ -83,7 +86,7 @@ export class StrikePcrComponent implements OnInit, OnDestroy {
   // Computed Values
   strikes = computed<StrikePCRItem[]>(() => this.pcrData()?.strikes || []);
   aggregate = computed<AggregatePCR | null>(() => this.pcrData()?.aggregate || null);
-  underlyingPrice = computed<number>(() => this.pcrData()?.underlyingPrice || 0);
+  underlyingPrice = computed<number>(() => this.marketOpenPrice() || this.pcrData()?.marketOpenPrice || this.pcrData()?.underlyingPrice || 0);
   atmStrike = computed<number | null>(() => this.pcrData()?.atmStrike || null);
   availableStrikes = computed<number[]>(() => this.pcrData()?.availableStrikes || []);
 
@@ -193,12 +196,16 @@ export class StrikePcrComponent implements OnInit, OnDestroy {
         strikeRange: this.strikeRange(),
         expiry: this.selectedExpiry() ?? undefined,
         live: this.isLiveMode(),
+        marketOpenPrice: this.marketOpenPrice() ?? undefined,
       })
       .subscribe({
         next: (response) => {
           this.isLoading.set(false);
           if (response.success && response.data) {
             this.pcrData.set(response.data);
+            if (this.marketOpenPrice() === null && (response.data.marketOpenPrice || response.data.underlyingPrice)) {
+              this.marketOpenPrice.set(response.data.marketOpenPrice || response.data.underlyingPrice);
+            }
             // Sync selected strike with server response if not explicitly set
             if (this.selectedStrike() === null) {
               this.selectedStrike.set(response.data.selectedStrike);
@@ -224,8 +231,25 @@ export class StrikePcrComponent implements OnInit, OnDestroy {
   onSymbolChange(symbol: string): void {
     this.selectedSymbol.set(symbol);
     this.selectedStrike.set(null); // Reset to ATM of new symbol
+    this.marketOpenPrice.set(null); // Reset to 9:15 AM opening price of new symbol
     this.loadExpiries();
     this.fetchPCRAnalysis();
+  }
+
+  /**
+   * Handle Market Open Price (9:15 AM) change
+   */
+  onOpenPriceChange(val: string | number): void {
+    const num = typeof val === 'string' ? parseFloat(val) : val;
+    if (isNaN(num) || num <= 0) return;
+    this.marketOpenPrice.set(num);
+    this.selectedStrike.set(null); // Recalculate initial ATM strike from new open price
+    this.fetchPCRAnalysis();
+    this.snackBar.open(
+      `Market Open Price updated to ₹${num.toFixed(2)} - Recalculated Initial ATM Strike`,
+      'OK',
+      { duration: 3000 }
+    );
   }
 
   /**

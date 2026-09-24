@@ -28,6 +28,21 @@
         </mat-select>
       </mat-form-field>
 
+      <!-- Market Open Price (9:15 AM First Price) -->
+      <mat-form-field appearance="outline" class="control-field open-price-field">
+        <mat-label>Market Open (9:15 AM)</mat-label>
+        <input
+          matInput
+          type="number"
+          step="0.05"
+          [value]="marketOpenPrice()"
+          (change)="onOpenPriceChange($any($event.target).value)"
+          placeholder="e.g. 23457"
+          matTooltip="First price at 9:15 AM market opening used as anchor for Initial ATM Strike"
+        />
+        <span matPrefix class="currency-prefix">₹&nbsp;</span>
+      </mat-form-field>
+
       <!-- Strike Selector -->
       <mat-form-field appearance="outline" class="control-field strike-field">
         <mat-label>Selected Strike</mat-label>
@@ -138,17 +153,17 @@
   <div *ngIf="pcrData()" class="pcr-content">
     <!-- Top Metric Summary Cards -->
     <div class="metrics-grid">
-      <!-- Card 1: Market Value Considered -->
+      <!-- Card 1: Market Open Price Considered (9:15 AM) -->
       <mat-card class="metric-card spot-card">
         <div class="card-header-icon">
           <mat-icon class="icon-spot">trending_up</mat-icon>
-          <span class="metric-title">Market Value Considered</span>
+          <span class="metric-title">Market Open (9:15 AM)</span>
         </div>
         <div class="metric-main-value">
           ₹{{ underlyingPrice() | number:'1.2-2' }}
         </div>
         <div class="metric-footer">
-          <span class="atm-badge">Spot Anchor for ATM Strike</span>
+          <span class="atm-badge">9:15 AM Opening Anchor for ATM Strike</span>
         </div>
       </mat-card>
 
@@ -160,7 +175,7 @@
         </div>
         <div class="metric-main-value highlight-text">
           {{ atmStrike() }}
-          <span class="target-atm-pill" *ngIf="atmStrike()">ATM</span>
+          <span class="target-atm-pill" *ngIf="atmStrike()">ATM (9:15 AM)</span>
         </div>
         <div class="metric-footer">
           <span>Window: &plusmn;{{ strikeRange() }} strikes (Selected: {{ selectedStrike() }})</span>
