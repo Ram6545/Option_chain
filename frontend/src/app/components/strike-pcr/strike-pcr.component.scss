@@ -417,6 +417,286 @@
   }
 }
 
+/* 4.1 Market Pressure & Direction Analysis Card */
+.market-pressure-card {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 18px 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+  transition: transform 0.2s, box-shadow 0.2s;
+
+  &.pressure-card-bearish {
+    border-left: 5px solid #dc2626 !important;
+    background: linear-gradient(180deg, #ffffff 0%, #fff5f5 100%);
+  }
+
+  &.pressure-card-bullish {
+    border-left: 5px solid #16a34a !important;
+    background: linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%);
+  }
+
+  &.pressure-card-mixed {
+    border-left: 5px solid #d97706 !important;
+    background: linear-gradient(180deg, #ffffff 0%, #fffbeb 100%);
+  }
+
+  &.pressure-card-neutral {
+    border-left: 5px solid #64748b !important;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  }
+
+  .pressure-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding-bottom: 14px;
+    border-bottom: 1px solid #e2e8f0;
+
+    .pressure-title-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+
+      .header-icon-wrap {
+        width: 44px;
+        height: 44px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+
+        mat-icon {
+          font-size: 26px;
+          width: 26px;
+          height: 26px;
+        }
+      }
+
+      .pressure-title-copy {
+        .title-with-pill {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+
+          h3 {
+            margin: 0;
+            font-size: 1.25rem;
+            font-weight: 800;
+            color: #1e1b4b;
+            letter-spacing: -0.01em;
+          }
+
+          .pressure-flow-pill {
+            font-size: 0.74rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 12px;
+            background: #e0e7ff;
+            color: #4338ca;
+            border: 1px solid #c7d2fe;
+          }
+        }
+
+        .pressure-subtitle {
+          margin: 4px 0 0 0;
+          font-size: 0.84rem;
+          color: #64748b;
+          font-weight: 500;
+        }
+      }
+    }
+
+    .pressure-verdict-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 18px;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+
+      .verdict-icon {
+        font-size: 26px;
+        width: 26px;
+        height: 26px;
+      }
+
+      .verdict-text-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+
+        .verdict-sub {
+          font-size: 0.68rem;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          opacity: 0.85;
+        }
+
+        .verdict-main {
+          font-size: 1.15rem;
+          font-weight: 900;
+          letter-spacing: 0.02em;
+          line-height: 1.2;
+        }
+      }
+    }
+  }
+
+  .pressure-indicators-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1.6fr;
+    gap: 16px;
+    margin-top: 16px;
+
+    @media (max-width: 1024px) {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    @media (max-width: 768px) {
+      grid-template-columns: 1fr;
+    }
+
+    .writing-stat-box {
+      background: #f8fafc;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+
+      &.call-stat-box {
+        border-left: 4px solid #dc2626;
+      }
+
+      &.put-stat-box {
+        border-left: 4px solid #16a34a;
+      }
+
+      .stat-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+
+        .stat-title {
+          font-size: 0.82rem;
+          font-weight: 750;
+          color: #475569;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+        }
+
+        .activity-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          padding: 2px 8px;
+          border-radius: 6px;
+          font-size: 0.78rem;
+          font-weight: 800;
+          letter-spacing: 0.03em;
+
+          .activity-arrow {
+            font-size: 14px;
+            width: 14px;
+            height: 14px;
+          }
+
+          &.activity-inc-call {
+            background: #fee2e2;
+            color: #b91c1c;
+            border: 1px solid #fca5a5;
+          }
+
+          &.activity-inc-put {
+            background: #dcfce7;
+            color: #15803d;
+            border: 1px solid #86efac;
+          }
+
+          &.activity-dec {
+            background: #f1f5f9;
+            color: #64748b;
+            border: 1px solid #cbd5e1;
+          }
+        }
+      }
+
+      .stat-value {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+
+        .stat-num {
+          font-size: 1.5rem;
+          font-weight: 800;
+          font-variant-numeric: tabular-nums;
+          font-family: 'Roboto Mono', monospace, sans-serif;
+        }
+
+        .stat-unit {
+          font-size: 0.76rem;
+          font-weight: 600;
+          color: #64748b;
+        }
+      }
+
+      .stat-sub {
+        .stat-cue {
+          font-size: 0.78rem;
+          font-weight: 600;
+          color: #64748b;
+        }
+      }
+    }
+
+    .pressure-reason-box {
+      border-radius: 10px;
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+
+      @media (max-width: 1024px) {
+        grid-column: 1 / -1;
+      }
+
+      .reason-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+
+        .reason-icon {
+          font-size: 20px;
+          width: 20px;
+          height: 20px;
+        }
+
+        strong {
+          font-size: 0.88rem;
+          font-weight: 800;
+          letter-spacing: 0.02em;
+        }
+      }
+
+      .reason-text {
+        margin: 0;
+        font-size: 0.92rem;
+        font-weight: 600;
+        line-height: 1.45;
+        color: #1e293b;
+      }
+    }
+  }
+}
+
 /* 5. PCR Table Card (Light Theme) */
 .table-card {
   background: #ffffff;
@@ -910,4 +1190,170 @@
     flex-direction: column;
     align-items: stretch;
   }
+}
+
+/* 6. Reference Guide Card Styles */
+.guide-card {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin-top: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+
+  .guide-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e2e8f0;
+
+    .info-icon {
+      color: #0b5cab;
+      font-size: 22px;
+      width: 22px;
+      height: 22px;
+    }
+
+    h4 {
+      margin: 0;
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: #1e1b4b;
+    }
+  }
+
+  .guide-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 24px;
+
+    .guide-col {
+      h5 {
+        margin: 0 0 10px 0;
+        font-size: 0.95rem;
+        font-weight: 750;
+        color: #1e293b;
+      }
+
+      ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+
+        li {
+          font-size: 0.88rem;
+          color: #475569;
+          line-height: 1.5;
+
+          code {
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 0.82rem;
+            color: #0b5cab;
+            font-weight: 600;
+          }
+        }
+      }
+    }
+  }
+
+  .pcr-badge-sample {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    font-family: 'Roboto Mono', monospace;
+    margin-right: 6px;
+
+    &.sample-bullish {
+      background: #dcfce7;
+      color: #15803d;
+      border: 1px solid #86efac;
+    }
+
+    &.sample-neutral {
+      background: #fef3c7;
+      color: #b45309;
+      border: 1px solid #fcd34d;
+    }
+
+    &.sample-bearish {
+      background: #fee2e2;
+      color: #b91c1c;
+      border: 1px solid #fca5a5;
+    }
+
+    &.sample-pressure-bearish {
+      background: #fee2e2;
+      color: #b91c1c;
+      border: 1px solid #fca5a5;
+    }
+
+    &.sample-pressure-bullish {
+      background: #dcfce7;
+      color: #15803d;
+      border: 1px solid #86efac;
+    }
+
+    &.sample-pressure-mixed {
+      background: #fef3c7;
+      color: #b45309;
+      border: 1px solid #fcd34d;
+    }
+
+    &.sample-pressure-neutral {
+      background: #f1f5f9;
+      color: #475569;
+      border: 1px solid #cbd5e1;
+    }
+  }
+}
+
+/* Market Pressure Utility Classes */
+.pressure-bearish {
+  background: #fee2e2 !important;
+  color: #b91c1c !important;
+  border: 1.5px solid #fca5a5 !important;
+}
+
+.pressure-bullish {
+  background: #dcfce7 !important;
+  color: #15803d !important;
+  border: 1.5px solid #86efac !important;
+}
+
+.pressure-mixed {
+  background: #fef3c7 !important;
+  color: #b45309 !important;
+  border: 1.5px solid #fcd34d !important;
+}
+
+.pressure-neutral {
+  background: #f1f5f9 !important;
+  color: #475569 !important;
+  border: 1.5px solid #cbd5e1 !important;
+}
+
+.pressure-text-bearish {
+  color: #dc2626 !important;
+}
+
+.pressure-text-bullish {
+  color: #16a34a !important;
+}
+
+.pressure-text-mixed {
+  color: #d97706 !important;
+}
+
+.pressure-text-neutral {
+  color: #64748b !important;
 }

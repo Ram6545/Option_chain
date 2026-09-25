@@ -31,6 +31,21 @@ import {
   IndicesResponse,
 } from '../../models/option-chain.model';
 
+export interface MarketPressureAnalysis {
+  callWritingStatus: 'Increasing' | 'Decreasing';
+  putWritingStatus: 'Increasing' | 'Decreasing';
+  callWritingDelta: number;
+  putWritingDelta: number;
+  marketDirection: 'BEARISH PRESSURE' | 'BULLISH PRESSURE' | 'MIXED / RANGE-BOUND' | 'NEUTRAL / UNCLEAR';
+  reason: string;
+  badgeClass: string;
+  cardClass: string;
+  textClass: string;
+  icon: string;
+  callWritingDesc: string;
+  putWritingDesc: string;
+}
+
 @Component({
   selector: 'app-strike-pcr',
   standalone: true,
@@ -89,6 +104,130 @@ export class StrikePcrComponent implements OnInit, OnDestroy {
   underlyingPrice = computed<number>(() => this.marketOpenPrice() || this.pcrData()?.marketOpenPrice || this.pcrData()?.underlyingPrice || 0);
   atmStrike = computed<number | null>(() => this.pcrData()?.atmStrike || null);
   availableStrikes = computed<number[]>(() => this.pcrData()?.availableStrikes || []);
+
+  // Previous aggregate snapshot to track writing changes tick-over-tick
+  previousAggregate = signal<AggregatePCR | null>(null);
+
+  /**
+   * Market Direction & Pressure Analysis based on Call Writing and Put Writing Activity:
+   * 1. Call Writing increases + Put Writing decreases => BEARISH PRESSURE (Red)
+   * 2. Call Writing decreases + Put Writing increases => BULLISH PRESSURE (Green)
+   * 3. Call Writing increases + Put Writing increases => MIXED / RANGE-BOUND (Yellow/Orange)
+   * 4. Call Writing decreases + Put Writing decreases => NEUTRAL / UNCLEAR (Gray)
+   */
+  marketPressure = computed<MarketPressureAnalysis>(() => {
+    const curr = this.aggregate();
+    if (!curr) {
+      return {
+        callWritingStatus: 'Decreasing',
+        putWritingStatus: 'Decreasing',
+        callWritingDelta: 0,
+        putWritingDelta: 0,
+        marketDirection: 'NEUTRAL / UNCLEAR',
+        reason: 'Both resistance and support may be weakening, so there is no clear directional signal.',
+        badgeClass: 'pressure-neutral',
+        cardClass: 'pressure-card-neutral',
+        textClass: 'pressure-text-neutral',
+        icon: 'remove_circle_outline',
+        callWritingDesc: 'Data unavailable',
+        putWritingDesc: 'Data unavailable',
+      };
+    }
+
+    const prev = this.previousAggregate();
+    const currCallChg = curr.totalCallChangeOI || 0;
+    const currPutChg = curr.totalPutChangeOI || 0;
+
+    let callWritingIncreasing: boolean;
+    let putWritingIncreasing: boolean;
+    let callDelta = currCallChg;
+    let putDelta = currPutChg;
+
+    // Compare with previous tick if available and values differ, otherwise use intraday cumulative change in OI
+    if (prev && (prev.totalCallChangeOI !== currCallChg || prev.totalPutChangeOI !== currPutChg)) {
+      callDelta = currCallChg - (prev.totalCallChangeOI || 0);
+      putDelta = currPutChg - (prev.totalPutChangeOI || 0);
+      callWritingIncreasing = callDelta >= 0;
+      putWritingIncreasing = putDelta >= 0;
+    } else {
+      // Intraday accumulation: positive change in OI indicates active writing / position addition
+      callWritingIncreasing = currCallChg >= 0;
+      putWritingIncreasing = currPutChg >= 0;
+    }
+
+    const callWritingStatus: 'Increasing' | 'Decreasing' = callWritingIncreasing ? 'Increasing' : 'Decreasing';
+    const putWritingStatus: 'Increasing' | 'Decreasing' = putWritingIncreasing ? 'Increasing' : 'Decreasing';
+
+    // 1. Call Writing increases + Put Writing decreases => BEARISH PRESSURE (Red)
+    if (callWritingIncreasing && !putWritingIncreasing) {
+      return {
+        callWritingStatus,
+        putWritingStatus,
+        callWritingDelta: callDelta,
+        putWritingDelta: putDelta,
+        marketDirection: 'BEARISH PRESSURE',
+        reason: 'Call Writing is increasing, indicating stronger resistance, while Put Writing is decreasing, indicating relatively weaker support.',
+        badgeClass: 'pressure-bearish',
+        cardClass: 'pressure-card-bearish',
+        textClass: 'pressure-text-bearish',
+        icon: 'trending_down',
+        callWritingDesc: 'Call Writing is increasing, indicating stronger resistance',
+        putWritingDesc: 'Put Writing is decreasing, indicating relatively weaker support',
+      };
+    }
+
+    // 2. Call Writing decreases + Put Writing increases => BULLISH PRESSURE (Green)
+    if (!callWritingIncreasing && putWritingIncreasing) {
+      return {
+        callWritingStatus,
+        putWritingStatus,
+        callWritingDelta: callDelta,
+        putWritingDelta: putDelta,
+        marketDirection: 'BULLISH PRESSURE',
+        reason: 'Call Writing is decreasing, indicating weaker resistance, while Put Writing is increasing, indicating stronger support.',
+        badgeClass: 'pressure-bullish',
+        cardClass: 'pressure-card-bullish',
+        textClass: 'pressure-text-bullish',
+        icon: 'trending_up',
+        callWritingDesc: 'Call Writing is decreasing, indicating weaker resistance',
+        putWritingDesc: 'Put Writing is increasing, indicating stronger support',
+      };
+    }
+
+    // 3. Call Writing increases + Put Writing increases => MIXED / RANGE-BOUND (Yellow/Orange)
+    if (callWritingIncreasing && putWritingIncreasing) {
+      return {
+        callWritingStatus,
+        putWritingStatus,
+        callWritingDelta: callDelta,
+        putWritingDelta: putDelta,
+        marketDirection: 'MIXED / RANGE-BOUND',
+        reason: 'Both Call Writing and Put Writing are increasing, suggesting both resistance and support may be increasing.',
+        badgeClass: 'pressure-mixed',
+        cardClass: 'pressure-card-mixed',
+        textClass: 'pressure-text-mixed',
+        icon: 'compare_arrows',
+        callWritingDesc: 'Call Writing is increasing, indicating resistance building',
+        putWritingDesc: 'Put Writing is increasing, indicating support building',
+      };
+    }
+
+    // 4. Call Writing decreases + Put Writing decreases => NEUTRAL / UNCLEAR (Gray)
+    return {
+      callWritingStatus,
+      putWritingStatus,
+      callWritingDelta: callDelta,
+      putWritingDelta: putDelta,
+      marketDirection: 'NEUTRAL / UNCLEAR',
+      reason: 'Both Call Writing and Put Writing are decreasing, suggesting both resistance and support may be weakening, so there is no clear directional signal.',
+      badgeClass: 'pressure-neutral',
+      cardClass: 'pressure-card-neutral',
+      textClass: 'pressure-text-neutral',
+      icon: 'remove_circle_outline',
+      callWritingDesc: 'Call Writing is decreasing, indicating resistance unwinding',
+      putWritingDesc: 'Put Writing is decreasing, indicating support unwinding',
+    };
+  });
 
   private getTop2Values(values: (number | undefined)[]): { max1: number; max2: number } {
     const valid = values.filter((v): v is number => typeof v === 'number' && v > 0);
@@ -202,6 +341,9 @@ export class StrikePcrComponent implements OnInit, OnDestroy {
         next: (response) => {
           this.isLoading.set(false);
           if (response.success && response.data) {
+            if (this.pcrData()?.aggregate) {
+              this.previousAggregate.set(this.pcrData()!.aggregate);
+            }
             this.pcrData.set(response.data);
             if (this.marketOpenPrice() === null && (response.data.marketOpenPrice || response.data.underlyingPrice)) {
               this.marketOpenPrice.set(response.data.marketOpenPrice || response.data.underlyingPrice);
@@ -232,6 +374,7 @@ export class StrikePcrComponent implements OnInit, OnDestroy {
     this.selectedSymbol.set(symbol);
     this.selectedStrike.set(null); // Reset to ATM of new symbol
     this.marketOpenPrice.set(null); // Reset to 9:15 AM opening price of new symbol
+    this.previousAggregate.set(null); // Reset tick history for new symbol
     this.loadExpiries();
     this.fetchPCRAnalysis();
   }

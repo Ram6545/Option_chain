@@ -226,6 +226,95 @@
       </div>
     </div>
 
+    <!-- Market Pressure & Direction Analysis (Call Writing vs Put Writing Activity) -->
+    <mat-card class="market-pressure-card" [ngClass]="marketPressure().cardClass">
+      <div class="pressure-card-header">
+        <div class="pressure-title-left">
+          <div class="header-icon-wrap" [ngClass]="marketPressure().badgeClass">
+            <mat-icon>{{ marketPressure().icon }}</mat-icon>
+          </div>
+          <div class="pressure-title-copy">
+            <div class="title-with-pill">
+              <h3>Market Direction &amp; Pressure</h3>
+              <span class="pressure-flow-pill">Call Writing vs Put Writing Order Flow</span>
+            </div>
+            <p class="pressure-subtitle">
+              Intraday writing activity based on {{ strikes().length }}-strike window &bull; Spot: ₹{{ underlyingPrice() | number:'1.2-2' }} &bull; PCR (Chg OI): {{ formatPCR(aggregate()?.aggregatePcrChangeOI) }}
+            </p>
+          </div>
+        </div>
+
+        <div class="pressure-verdict-badge" [ngClass]="marketPressure().badgeClass">
+          <mat-icon class="verdict-icon">{{ marketPressure().icon }}</mat-icon>
+          <div class="verdict-text-wrap">
+            <span class="verdict-sub">MARKET DIRECTION</span>
+            <span class="verdict-main">{{ marketPressure().marketDirection }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="pressure-indicators-grid">
+        <!-- Call Writing Indicator Box -->
+        <div class="writing-stat-box call-stat-box">
+          <div class="stat-top">
+            <span class="stat-title">Call Writing</span>
+            <span
+              class="activity-pill"
+              [class.activity-inc-call]="marketPressure().callWritingStatus === 'Increasing'"
+              [class.activity-dec]="marketPressure().callWritingStatus === 'Decreasing'"
+            >
+              <mat-icon class="activity-arrow">{{ marketPressure().callWritingStatus === 'Increasing' ? 'arrow_upward' : 'arrow_downward' }}</mat-icon>
+              {{ marketPressure().callWritingStatus }}
+            </span>
+          </div>
+          <div class="stat-value">
+            <span class="stat-num" [ngClass]="getChangeClass(aggregate()?.totalCallChangeOI)">
+              <span *ngIf="(aggregate()?.totalCallChangeOI || 0) > 0">+</span>{{ formatNumber(aggregate()?.totalCallChangeOI) }}
+            </span>
+            <span class="stat-unit">CE Chg in OI</span>
+          </div>
+          <div class="stat-sub">
+            <span class="stat-cue">{{ marketPressure().callWritingDesc }}</span>
+          </div>
+        </div>
+
+        <!-- Put Writing Indicator Box -->
+        <div class="writing-stat-box put-stat-box">
+          <div class="stat-top">
+            <span class="stat-title">Put Writing</span>
+            <span
+              class="activity-pill"
+              [class.activity-inc-put]="marketPressure().putWritingStatus === 'Increasing'"
+              [class.activity-dec]="marketPressure().putWritingStatus === 'Decreasing'"
+            >
+              <mat-icon class="activity-arrow">{{ marketPressure().putWritingStatus === 'Increasing' ? 'arrow_upward' : 'arrow_downward' }}</mat-icon>
+              {{ marketPressure().putWritingStatus }}
+            </span>
+          </div>
+          <div class="stat-value">
+            <span class="stat-num" [ngClass]="getChangeClass(aggregate()?.totalPutChangeOI)">
+              <span *ngIf="(aggregate()?.totalPutChangeOI || 0) > 0">+</span>{{ formatNumber(aggregate()?.totalPutChangeOI) }}
+            </span>
+            <span class="stat-unit">PE Chg in OI</span>
+          </div>
+          <div class="stat-sub">
+            <span class="stat-cue">{{ marketPressure().putWritingDesc }}</span>
+          </div>
+        </div>
+
+        <!-- Direction & Reason Summary Box -->
+        <div class="pressure-reason-box" [ngClass]="marketPressure().badgeClass">
+          <div class="reason-header">
+            <mat-icon class="reason-icon">{{ marketPressure().icon }}</mat-icon>
+            <strong>Market Direction: {{ marketPressure().marketDirection }}</strong>
+          </div>
+          <p class="reason-text">
+            <strong>Reason: </strong>{{ marketPressure().reason }}
+          </p>
+        </div>
+      </div>
+    </mat-card>
+
     <!-- PCR Table Card -->
     <mat-card class="table-card">
       <div class="table-header-toolbar">
@@ -428,6 +517,27 @@
             <li><span class="pcr-badge-sample sample-bullish">PCR > 1.20</span> <strong>Bullish:</strong> Traders selling aggressive puts as support.</li>
             <li><span class="pcr-badge-sample sample-neutral">0.80 - 1.20</span> <strong>Neutral / Range-bound:</strong> Balanced call and put positioning.</li>
             <li><span class="pcr-badge-sample sample-bearish">PCR < 0.80</span> <strong>Bearish:</strong> Traders selling heavy calls creating overhead resistance.</li>
+          </ul>
+        </div>
+        <div class="guide-col">
+          <h5>Market Direction Rules</h5>
+          <ul>
+            <li>
+              <span class="pcr-badge-sample sample-pressure-bearish">Call Inc + Put Dec</span>
+              <strong>BEARISH PRESSURE:</strong> Stronger resistance + relatively weaker support (Red).
+            </li>
+            <li>
+              <span class="pcr-badge-sample sample-pressure-bullish">Call Dec + Put Inc</span>
+              <strong>BULLISH PRESSURE:</strong> Weaker resistance + stronger support (Green).
+            </li>
+            <li>
+              <span class="pcr-badge-sample sample-pressure-mixed">Call Inc + Put Inc</span>
+              <strong>MIXED / RANGE-BOUND:</strong> Both resistance and support may be increasing (Yellow/Orange).
+            </li>
+            <li>
+              <span class="pcr-badge-sample sample-pressure-neutral">Call Dec + Put Dec</span>
+              <strong>NEUTRAL / UNCLEAR:</strong> Both resistance and support weakening; no clear directional signal (Gray).
+            </li>
           </ul>
         </div>
       </div>
