@@ -18,26 +18,26 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  padding: 10px 18px 8px 18px;
+  padding: 6px 14px 4px 14px;
   background: #ffffff;
   border-bottom: 1px solid #e2e8f0;
-  gap: 16px;
+  gap: 12px;
   flex-wrap: wrap;
 
   .left-controls {
     display: flex;
     align-items: flex-end;
-    gap: 16px;
+    gap: 12px;
     flex-wrap: wrap;
   }
 
   .control-group {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
 
     .control-label {
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 500;
       color: #64748b;
     }
@@ -46,42 +46,42 @@
   .spot-selector-box {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 7px;
     background: #ffffff;
     border: 1.5px solid #cbd5e1;
     border-radius: 6px;
-    padding: 8px 14px;
+    padding: 4px 10px;
     cursor: pointer;
     user-select: none;
     transition: all 0.15s ease;
-    height: 42px;
+    height: 36px;
 
     &:hover {
       border-color: #0b5cab;
     }
 
     .search-icon {
-      font-size: 20px;
-      width: 20px;
-      height: 20px;
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
       color: #64748b;
     }
 
     .index-symbol {
       font-weight: 750;
-      font-size: 15.5px;
+      font-size: 14px;
       color: #0f172a;
     }
 
     .spot-price-val {
       font-weight: 850;
-      font-size: 17px;
+      font-size: 15px;
       color: #0f172a;
-      margin-left: 4px;
+      margin-left: 2px;
     }
 
     .spot-change {
-      font-size: 14px;
+      font-size: 12.5px;
       font-weight: 700;
 
       &.positive {
@@ -107,13 +107,13 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 14px;
+    gap: 8px;
     background: #ffffff;
     border: 1.5px solid #cbd5e1;
     border-radius: 6px;
-    padding: 8px 14px;
-    min-width: 155px;
-    height: 42px;
+    padding: 4px 10px;
+    min-width: 135px;
+    height: 36px;
     cursor: pointer;
     user-select: none;
     transition: all 0.15s ease;
@@ -124,15 +124,61 @@
 
     .selected-expiry-text,
     .selected-strike-text {
-      font-size: 15.5px;
+      font-size: 13.5px;
       font-weight: 700;
       color: #0f172a;
     }
 
     .dropdown-arrow {
-      font-size: 22px;
-      width: 22px;
-      height: 22px;
+      font-size: 20px;
+      width: 20px;
+      height: 20px;
+      color: #64748b;
+    }
+  }
+
+  .greeks-selector-box {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: #ffffff;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 4px 10px;
+    min-width: 155px;
+    height: 36px;
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.15s ease;
+
+    &:hover {
+      border-color: #0b5cab;
+    }
+
+    .greek-box-left {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+
+      .greek-box-icon {
+        font-size: 17px;
+        width: 17px;
+        height: 17px;
+        color: #4f46e5;
+      }
+
+      .selected-greek-text {
+        font-size: 13.5px;
+        font-weight: 700;
+        color: #0f172a;
+      }
+    }
+
+    .dropdown-arrow {
+      font-size: 20px;
+      width: 20px;
+      height: 20px;
       color: #64748b;
     }
   }
@@ -140,7 +186,7 @@
   .right-actions {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 10px;
     flex-wrap: wrap;
 
     .action-btn {
@@ -305,26 +351,83 @@
   font-weight: 700 !important;
 }
 
+// Greeks Dropdown Custom Menu Styling
+.greeks-dropdown-menu {
+  min-width: 275px;
+
+  .menu-icon-state {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+    color: #94a3b8;
+    margin-right: 10px;
+
+    &.icon-active {
+      color: #0b5cab;
+    }
+  }
+
+  .menu-item-title {
+    font-size: 14px;
+    color: #0f172a;
+    &.font-bold {
+      font-weight: 750;
+    }
+  }
+
+  .menu-item-name {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: #1e293b;
+  }
+
+  .greek-desc-chip {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 650;
+    color: #475569;
+    background: #f1f5f9;
+    padding: 2px 8px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+  }
+
+  .menu-section-header {
+    font-size: 11px;
+    font-weight: 800;
+    color: #94a3b8;
+    letter-spacing: 0.8px;
+    padding: 8px 16px 4px 16px;
+    user-select: none;
+  }
+
+  .menu-divider {
+    height: 1px;
+    background: #e2e8f0;
+    margin: 4px 0;
+  }
+}
+
 // 2. METRICS TICKER BAR
 .metrics-ticker-bar {
   display: flex;
   align-items: center;
-  gap: 24px;
-  padding: 10px 20px;
+  gap: 16px;
+  padding: 5px 14px;
   background: #ffffff;
   border-bottom: 1.5px solid #e2e8f0;
-  font-size: 15px;
+  font-size: 13px;
   flex-wrap: wrap;
 
   .ticker-item {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
 
     .ticker-label {
       color: #64748b;
       font-weight: 600;
-      font-size: 14.5px;
+      font-size: 12.5px;
 
       &.blue-label {
         color: #0b5cab;
@@ -341,10 +444,10 @@
 
     .ticker-box-label {
       border: 1.5px solid #cbd5e1;
-      border-radius: 5px;
-      padding: 3px 10px;
+      border-radius: 4px;
+      padding: 2px 7px;
       color: #0b5cab;
-      font-size: 14px;
+      font-size: 12px;
 
       .box-val {
         color: #0f172a;
@@ -355,7 +458,7 @@
     .ticker-val {
       color: #0f172a;
       font-weight: 750;
-      font-size: 15.5px;
+      font-size: 13.5px;
 
       &.negative {
         color: #dc2626;
@@ -363,7 +466,7 @@
 
       &.bold-val {
         font-weight: 800;
-        font-size: 16.5px;
+        font-size: 14px;
       }
 
       &.vix-val {
@@ -737,10 +840,10 @@
   }
 }
 
-// 3. TABLE STYLES - Centered & Large Numbers
+// 3. TABLE STYLES - High Density Financial Layout
 .table-scroll-wrapper {
   width: 100%;
-  height: calc(100vh - 200px);
+  height: calc(100vh - 122px);
   overflow-x: auto;
   overflow-y: auto;
   scroll-behavior: smooth;
@@ -751,7 +854,7 @@
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 16px;
+  font-size: 13px;
   background: #ffffff;
 
   thead {
@@ -769,7 +872,7 @@
         z-index: 22;
         background: #382b68;
         border: none;
-        padding: 10px 8px 8px 8px;
+        padding: 5px 6px 4px 6px;
         text-align: center;
         vertical-align: middle;
 
@@ -779,8 +882,8 @@
           .calls-title {
             color: #34d399;
             font-weight: 850;
-            font-size: 18px;
-            letter-spacing: 1.5px;
+            font-size: 15px;
+            letter-spacing: 1.2px;
             display: inline-block;
           }
         }
@@ -789,6 +892,7 @@
           background: #382b68;
           border: none;
           min-width: 110px;
+          padding: 3px 2px;
         }
 
         &.group-put-header {
@@ -797,9 +901,80 @@
           .puts-title {
             color: #ffffff;
             font-weight: 850;
-            font-size: 18px;
-            letter-spacing: 1.5px;
+            font-size: 15px;
+            letter-spacing: 1.2px;
             display: inline-block;
+          }
+        }
+
+        .group-title-with-actions {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .section-greek-toggle-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          background: rgba(255, 255, 255, 0.12);
+          border: 1px solid rgba(255, 255, 255, 0.25);
+          color: #e2e8f0;
+          font-size: 11px;
+          font-weight: 650;
+          padding: 2px 7px;
+          border-radius: 12px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+
+          .btn-icon {
+            font-size: 13px;
+            width: 13px;
+            height: 13px;
+          }
+
+          &:hover {
+            background: rgba(255, 255, 255, 0.22);
+            color: #ffffff;
+            border-color: rgba(255, 255, 255, 0.4);
+          }
+
+          &.btn-active {
+            background: #4f46e5;
+            border-color: #818cf8;
+            color: #ffffff;
+            box-shadow: 0 1px 3px rgba(79, 70, 229, 0.4);
+          }
+        }
+
+        .both-greeks-quick-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(255, 255, 255, 0.1);
+          border: 1px solid rgba(255, 255, 255, 0.25);
+          color: #c7d2fe;
+          font-size: 10px;
+          font-weight: 750;
+          letter-spacing: 0.5px;
+          padding: 2px 6px;
+          border-radius: 10px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          white-space: nowrap;
+
+          &:hover {
+            background: rgba(255, 255, 255, 0.2);
+            color: #ffffff;
+          }
+
+          &.both-on {
+            background: #2563eb;
+            border-color: #60a5fa;
+            color: #ffffff;
+            box-shadow: 0 1px 3px rgba(37, 99, 235, 0.4);
           }
         }
 
@@ -810,8 +985,8 @@
           .pcr-title {
             color: #fbbf24;
             font-weight: 850;
-            font-size: 17px;
-            letter-spacing: 1.2px;
+            font-size: 14px;
+            letter-spacing: 1px;
             display: inline-block;
           }
         }
@@ -824,13 +999,13 @@
 
       th {
         position: sticky;
-        top: 38px;
+        top: 29px;
         z-index: 21;
         background: #382b68;
-        padding: 10px 10px;
+        padding: 5px 6px;
         font-weight: 750;
-        font-size: 14.5px;
-        letter-spacing: 0.4px;
+        font-size: 12px;
+        letter-spacing: 0.3px;
         text-align: center;
         border-right: 1px solid rgba(255, 255, 255, 0.15);
         border-top: 1px solid rgba(255, 255, 255, 0.15);
@@ -846,32 +1021,67 @@
         &.th-greek {
           background: #2b1f55;
           color: #c7d2fe;
-          font-size: 13.5px;
-          letter-spacing: 0.5px;
-          min-width: 75px;
+          font-size: 11.5px;
+          letter-spacing: 0.3px;
+          min-width: 62px;
+          padding: 5px 4px;
+
+          &.th-greek-actionable {
+            cursor: default;
+
+            .greek-th-flex {
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              gap: 4px;
+            }
+
+            .greek-close-badge {
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              width: 14px;
+              height: 14px;
+              border-radius: 50%;
+              background: rgba(255, 255, 255, 0.18);
+              color: #e0e7ff;
+              font-size: 9px;
+              line-height: 1;
+              cursor: pointer;
+              transition: all 0.15s ease;
+
+              &:hover {
+                background: #ef4444;
+                color: #ffffff;
+                transform: scale(1.15);
+              }
+            }
+          }
         }
 
         &.th-pcr {
           background: #24164b;
           color: #fef08a;
-          font-size: 14px;
+          font-size: 12px;
           font-weight: 800;
-          letter-spacing: 0.5px;
-          min-width: 90px;
+          letter-spacing: 0.4px;
+          min-width: 75px;
+          padding: 5px 4px;
         }
 
         &.th-strike {
           text-align: center;
           background: #2a1f52;
-          min-width: 120px;
-          font-size: 16px;
+          min-width: 105px;
+          font-size: 13.5px;
           font-weight: 800;
+          padding: 5px 4px;
           border-left: 1.5px solid rgba(255, 255, 255, 0.25);
           border-right: 1.5px solid rgba(255, 255, 255, 0.25);
 
           .sort-arrow {
-            font-size: 13px;
-            margin-left: 4px;
+            font-size: 11px;
+            margin-left: 3px;
           }
         }
       }
@@ -889,24 +1099,24 @@
 
       &.atm-highlight {
         background-color: rgba(79, 70, 229, 0.08) !important;
-        border-top: 2.5px solid #4f46e5 !important;
-        border-bottom: 2.5px solid #4f46e5 !important;
+        border-top: 2px solid #4f46e5 !important;
+        border-bottom: 2px solid #4f46e5 !important;
 
         .cell-strike {
-          box-shadow: inset 0 0 0 3px #4f46e5, 0 0 12px rgba(79, 70, 229, 0.35);
+          box-shadow: inset 0 0 0 2px #4f46e5, 0 0 8px rgba(79, 70, 229, 0.35);
           background-color: #e0e7ff !important;
 
           .strike-link {
             color: #312e81 !important;
             font-weight: 900 !important;
-            font-size: 16.5px !important;
+            font-size: 14px !important;
           }
 
           .atm-tag {
             background: #4f46e5 !important;
             color: #ffffff !important;
             font-weight: 850 !important;
-            box-shadow: 0 2px 5px rgba(79, 70, 229, 0.4);
+            box-shadow: 0 1px 3px rgba(79, 70, 229, 0.4);
           }
         }
       }
@@ -918,13 +1128,16 @@
       }
 
       td {
-        padding: 10px 11px;
+        padding: 2px 5px;
         border-right: 1px solid #e2e8f0;
         white-space: nowrap;
         color: #0f172a;
-        font-size: 16px;
-        line-height: 1.4;
+        font-size: 12.5px;
+        line-height: 1.2;
         text-align: center;
+        height: 26px;
+        box-sizing: border-box;
+        vertical-align: middle;
 
         &.align-center {
           text-align: center !important;
@@ -1002,230 +1215,191 @@
           }
         }
 
-        // Strike Price Cell: Center with Position Tags
+        // Strike Price Cell: Center with Position Tags (Single Line Compact)
         &.cell-strike {
           background-color: #ebf5fb !important;
           border-left: 1.5px solid #cbd5e1;
           border-right: 1.5px solid #cbd5e1;
           text-align: center;
-          min-width: 120px;
-          padding: 8px 10px;
+          min-width: 95px;
+          padding: 1.5px 5px;
+          white-space: nowrap;
 
-          .strike-cell-inner {
-            display: flex;
-            flex-direction: column;
+          .strike-main-line {
+            display: inline-flex;
             align-items: center;
-            gap: 2px;
+            justify-content: center;
+            gap: 4px;
+            line-height: 1.2;
+            white-space: nowrap;
           }
 
           .strike-link {
-            font-size: 17.5px;
+            font-size: 13px;
             font-weight: 800;
             color: #0b5cab;
             line-height: 1.2;
           }
 
-          .strike-subtag {
-            margin-top: 1px;
-          }
-
           .atm-tag {
             background: #4f46e5;
             color: #ffffff;
-            font-size: 10px;
-            font-weight: 800;
-            padding: 2px 7px;
-            border-radius: 4px;
-            letter-spacing: 0.5px;
+            font-size: 8.5px;
+            font-weight: 850;
+            padding: 1px 4px;
+            border-radius: 3px;
+            letter-spacing: 0.3px;
             display: inline-block;
-            box-shadow: 0 1px 3px rgba(79, 70, 229, 0.4);
+            box-shadow: 0 1px 2px rgba(79, 70, 229, 0.4);
+            line-height: 1.1;
+          }
+
+          .badge-tag,
+          .sr-micro-badge {
+            font-size: 8px;
+            font-weight: 800;
+            padding: 1px 4px;
+            border-radius: 3px;
+            letter-spacing: 0.2px;
+            line-height: 1.1;
+            display: inline-block;
+            cursor: help;
           }
 
           .badge-s-holding {
             background: #16a34a;
             color: #ffffff;
-            font-size: 9.5px;
-            font-weight: 850;
-            padding: 2px 7px;
-            border-radius: 4px;
-            letter-spacing: 0.4px;
-            display: inline-block;
-            box-shadow: 0 1px 3px rgba(22, 163, 74, 0.4);
+            box-shadow: 0 1px 2px rgba(22, 163, 74, 0.4);
           }
 
           .badge-s-confluent {
             background: linear-gradient(135deg, #15803d 0%, #16a34a 100%);
             color: #ffffff;
-            font-size: 9.5px;
-            font-weight: 900;
-            padding: 2.5px 8px;
-            border-radius: 4px;
-            letter-spacing: 0.4px;
-            display: inline-block;
+            font-weight: 850;
             border: 1px solid #86efac;
-            box-shadow: 0 2px 6px rgba(21, 128, 61, 0.45);
+            box-shadow: 0 1px 3px rgba(21, 128, 61, 0.4);
           }
 
           .badge-s-breaking {
             background: #ea580c;
             color: #ffffff;
-            font-size: 9.5px;
-            font-weight: 850;
-            padding: 2px 7px;
-            border-radius: 4px;
-            letter-spacing: 0.4px;
-            display: inline-block;
             animation: pulse-badge 1.2s infinite;
-            box-shadow: 0 1px 4px rgba(234, 88, 12, 0.5);
+            box-shadow: 0 1px 3px rgba(234, 88, 12, 0.4);
           }
 
           .badge-r-holding {
             background: #dc2626;
             color: #ffffff;
-            font-size: 9.5px;
-            font-weight: 850;
-            padding: 2px 7px;
-            border-radius: 4px;
-            letter-spacing: 0.4px;
-            display: inline-block;
-            box-shadow: 0 1px 3px rgba(220, 38, 38, 0.4);
+            box-shadow: 0 1px 2px rgba(220, 38, 38, 0.4);
           }
 
           .badge-r-confluent {
             background: linear-gradient(135deg, #b91c1c 0%, #dc2626 100%);
             color: #ffffff;
-            font-size: 9.5px;
-            font-weight: 900;
-            padding: 2.5px 8px;
-            border-radius: 4px;
-            letter-spacing: 0.4px;
-            display: inline-block;
+            font-weight: 850;
             border: 1px solid #fca5a5;
-            box-shadow: 0 2px 6px rgba(185, 28, 28, 0.45);
+            box-shadow: 0 1px 3px rgba(185, 28, 28, 0.4);
           }
 
           .badge-r-breaking {
             background: #059669;
             color: #ffffff;
-            font-size: 9.5px;
-            font-weight: 850;
-            padding: 2px 7px;
-            border-radius: 4px;
-            letter-spacing: 0.4px;
-            display: inline-block;
             animation: pulse-badge 1.2s infinite;
-            box-shadow: 0 1px 4px rgba(5, 150, 105, 0.5);
+            box-shadow: 0 1px 3px rgba(5, 150, 105, 0.4);
           }
 
           .badge-vol-support {
             background: #0284c7;
             color: #ffffff;
-            font-size: 9.5px;
-            font-weight: 850;
-            padding: 2px 7px;
-            border-radius: 4px;
-            letter-spacing: 0.4px;
-            display: inline-block;
-            box-shadow: 0 1px 3px rgba(2, 132, 199, 0.4);
+            box-shadow: 0 1px 2px rgba(2, 132, 199, 0.4);
           }
 
           .badge-vol-resistance {
             background: #7c3aed;
             color: #ffffff;
-            font-size: 9.5px;
-            font-weight: 850;
-            padding: 2px 7px;
-            border-radius: 4px;
-            letter-spacing: 0.4px;
-            display: inline-block;
-            box-shadow: 0 1px 3px rgba(124, 58, 237, 0.4);
-          }
-
-          .position-text {
-            font-size: 11px;
-            color: #64748b;
-            font-weight: 600;
-            letter-spacing: 0.2px;
+            box-shadow: 0 1px 2px rgba(124, 58, 237, 0.4);
           }
         }
 
         // PCR Columns Styling
         &.cell-pcr {
           background-color: #faf5ff;
-          min-width: 90px;
+          min-width: 75px;
+          padding: 2.5px 4px;
 
           .pcr-pill {
             display: inline-block;
-            padding: 4px 10px;
-            border-radius: 6px;
-            font-weight: 800;
-            font-size: 15px;
+            padding: 1.5px 5px;
+            border-radius: 4px;
+            font-weight: 750;
+            font-size: 11.5px;
             font-family: 'Roboto Mono', monospace, sans-serif;
             background: #f1f5f9;
             color: #334155;
-            min-width: 55px;
+            min-width: 44px;
             text-align: center;
 
             &.pcr-bullish {
               background: #dcfce7;
               color: #15803d;
-              border: 1.5px solid #86efac;
+              border: 1px solid #86efac;
             }
 
             &.pcr-bearish {
               background: #fee2e2;
               color: #b91c1c;
-              border: 1.5px solid #fca5a5;
+              border: 1px solid #fca5a5;
             }
           }
 
           .pcr-chg-val {
-            font-size: 15.5px;
-            font-weight: 750;
+            font-size: 12px;
+            font-weight: 700;
             font-family: 'Roboto Mono', monospace, sans-serif;
           }
         }
 
         // Option Greeks styling
         &.cell-greek {
-          font-size: 15px;
+          font-size: 12px;
+          padding: 2.5px 4px;
 
           .greek-val {
-            font-weight: 700;
+            font-weight: 650;
             color: #1e293b;
             font-family: 'Roboto Mono', -apple-system, monospace, sans-serif;
-            font-size: 15px;
+            font-size: 12px;
           }
 
           .pos-greek {
             color: #15803d !important;
-            font-weight: 800;
+            font-weight: 750;
           }
 
           .neg-greek {
             color: #dc2626 !important;
-            font-weight: 800;
+            font-weight: 750;
           }
 
           .theta-val {
             color: #b91c1c;
-            font-weight: 700;
+            font-weight: 650;
           }
 
           .gamma-val {
             color: #4338ca;
-            font-weight: 700;
+            font-weight: 650;
           }
 
           .vega-val {
             color: #0284c7;
-            font-weight: 700;
+            font-weight: 650;
           }
         }
 
         // Cell typography
         .cell-val {
-          font-size: 16px;
+          font-size: 13px;
           color: #0f172a;
           font-weight: 600;
         }
@@ -1233,13 +1407,13 @@
         .pos-num {
           color: #15803d !important;
           font-weight: 700;
-          font-size: 16px;
+          font-size: 13px;
         }
 
         .neg-num {
           color: #dc2626 !important;
           font-weight: 700;
-          font-size: 16px;
+          font-size: 13px;
         }
 
         // Centered number styling & links
@@ -1248,20 +1422,81 @@
           text-decoration: underline;
           cursor: pointer;
           font-weight: 700;
-          font-size: 16px;
+          font-size: 13px;
 
           &.bold-link {
-            font-weight: 800;
-            font-size: 16.5px;
+            font-weight: 750;
+            font-size: 13.5px;
           }
 
           &.ltp-num {
             font-weight: 800;
-            font-size: 17px;
+            font-size: 13.5px;
           }
         }
       }
     }
+  }
+
+  // Row Density Variations (Toggled dynamically by user)
+  &.density-compact {
+    tbody .data-row {
+      height: 25px !important;
+      td {
+        padding: 1.5px 4px !important;
+        font-size: 12px !important;
+        line-height: 1.15 !important;
+        height: 25px !important;
+      }
+    }
+    .cell-strike {
+      padding: 1px 4px !important;
+      .strike-link { font-size: 12px !important; }
+      .atm-tag { font-size: 8px !important; padding: 0.5px 3px !important; }
+      .sr-micro-badge { font-size: 7.5px !important; padding: 0.5px 3px !important; }
+    }
+    .blue-link.ltp-num { font-size: 12px !important; }
+    .cell-val, .pos-num, .neg-num { font-size: 12px !important; }
+  }
+
+  &.density-normal {
+    tbody .data-row {
+      height: 32px !important;
+      td {
+        padding: 3.5px 6px !important;
+        font-size: 13px !important;
+        line-height: 1.25 !important;
+        height: 32px !important;
+      }
+    }
+    .cell-strike {
+      padding: 2.5px 5px !important;
+      .strike-link { font-size: 13.5px !important; }
+      .atm-tag { font-size: 8.5px !important; padding: 1px 4px !important; }
+      .sr-micro-badge { font-size: 8px !important; padding: 1px 4px !important; }
+    }
+    .blue-link.ltp-num { font-size: 13.5px !important; }
+    .cell-val, .pos-num, .neg-num { font-size: 13px !important; }
+  }
+
+  &.density-comfortable {
+    tbody .data-row {
+      height: 40px !important;
+      td {
+        padding: 6px 8px !important;
+        font-size: 14px !important;
+        line-height: 1.35 !important;
+        height: 40px !important;
+      }
+    }
+    .cell-strike {
+      padding: 4px 7px !important;
+      .strike-link { font-size: 14.5px !important; }
+      .atm-tag { font-size: 9.5px !important; padding: 1px 4px !important; }
+      .sr-micro-badge { font-size: 9px !important; padding: 1px 4px !important; }
+    }
+    .blue-link.ltp-num { font-size: 14.5px !important; }
+    .cell-val, .pos-num, .neg-num { font-size: 14px !important; }
   }
 
   tfoot {
@@ -1272,15 +1507,15 @@
     box-shadow: 0 -3px 10px rgba(0, 0, 0, 0.2);
 
     .total-row {
-      border-top: 2.5px solid #334155;
-      border-bottom: 2.5px solid #334155;
+      border-top: 2px solid #334155;
+      border-bottom: 2px solid #334155;
 
       td.total-cell {
-        padding: 12px 10px;
+        padding: 5px 6px;
         background: #0f172a;
         border-right: 1px solid #334155;
         font-weight: 750;
-        font-size: 16px;
+        font-size: 12.5px;
         white-space: nowrap;
         color: #f8fafc;
         text-align: center;
@@ -1289,28 +1524,28 @@
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 2px;
+          gap: 1px;
 
           .agg-mini-label {
-            font-size: 11px;
+            font-size: 9px;
             color: #94a3b8;
             font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 0.4px;
+            letter-spacing: 0.3px;
           }
         }
 
         .bold-val {
           font-weight: 800;
-          font-size: 16.5px;
+          font-size: 13px;
         }
 
         &.strike-total-label {
           background: #1e1b4b !important;
           color: #ffffff;
           font-weight: 850;
-          font-size: 15.5px;
-          letter-spacing: 0.6px;
+          font-size: 12.5px;
+          letter-spacing: 0.5px;
           border-left: 2px solid #4338ca;
           border-right: 2px solid #4338ca;
 
@@ -1318,12 +1553,12 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 6px;
+            gap: 4px;
 
             .agg-icon {
-              font-size: 20px;
-              width: 20px;
-              height: 20px;
+              font-size: 16px;
+              width: 16px;
+              height: 16px;
               color: #fbbf24;
             }
           }
@@ -1337,16 +1572,16 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 2px;
+            gap: 1px;
 
             .pcr-agg-num {
-              font-size: 18px;
+              font-size: 14.5px;
               font-weight: 850;
               font-family: 'Roboto Mono', monospace, sans-serif;
             }
 
             .pcr-agg-sub {
-              font-size: 11px;
+              font-size: 9.5px;
               color: #94a3b8;
               font-weight: 600;
             }

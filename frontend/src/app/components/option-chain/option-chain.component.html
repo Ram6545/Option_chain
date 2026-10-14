@@ -69,6 +69,96 @@
             </button>
           </mat-menu>
         </div>
+
+        <!-- Option Greeks Selector -->
+        <div class="control-group">
+          <label class="control-label">Option Greeks</label>
+          <div class="greeks-selector-box" [matMenuTriggerFor]="greeksMenu">
+            <div class="greek-box-left">
+              <mat-icon class="greek-box-icon">functions</mat-icon>
+              <span class="selected-greek-text">{{ getGreeksLabel() }}</span>
+            </div>
+            <mat-icon class="dropdown-arrow">keyboard_arrow_down</mat-icon>
+          </div>
+          <mat-menu #greeksMenu="matMenu" class="custom-dropdown-menu greeks-dropdown-menu" yPosition="below" [overlapTrigger]="false">
+            <!-- Master Toggle Both Sides -->
+            <button mat-menu-item (click)="toggleBothSidesGreeks()">
+              <mat-icon class="menu-icon-state" [class.icon-active]="showGreeks() && showCallsGreeks() && showPutsGreeks()">
+                {{ (showGreeks() && showCallsGreeks() && showPutsGreeks()) ? 'check_box' : 'check_box_outline_blank' }}
+              </mat-icon>
+              <span class="menu-item-title font-bold">Both Sides (Show / Hide)</span>
+              <span class="greek-desc-chip">Both</span>
+            </button>
+
+            <div class="menu-divider"></div>
+            <div class="menu-section-header">SIDE-BY-SIDE CONTROLS</div>
+            <!-- Calls Side Toggle -->
+            <button mat-menu-item (click)="toggleCallsGreeks($event)">
+              <mat-icon class="menu-icon-state" [class.icon-active]="showGreeks() && showCallsGreeks()">
+                {{ (showGreeks() && showCallsGreeks()) ? 'check_box' : 'check_box_outline_blank' }}
+              </mat-icon>
+              <span class="menu-item-name">Calls Side Greeks</span>
+              <span class="greek-desc-chip">CE Side</span>
+            </button>
+            <!-- Puts Side Toggle -->
+            <button mat-menu-item (click)="togglePutsGreeks($event)">
+              <mat-icon class="menu-icon-state" [class.icon-active]="showGreeks() && showPutsGreeks()">
+                {{ (showGreeks() && showPutsGreeks()) ? 'check_box' : 'check_box_outline_blank' }}
+              </mat-icon>
+              <span class="menu-item-name">Puts Side Greeks</span>
+              <span class="greek-desc-chip">PE Side</span>
+            </button>
+
+            <div class="menu-divider"></div>
+            <div class="menu-section-header">INDIVIDUAL GREEKS</div>
+            <button mat-menu-item (click)="toggleGreek('delta', $event)">
+              <mat-icon class="menu-icon-state" [class.icon-active]="showGreeks() && showDelta()">
+                {{ showGreeks() && showDelta() ? 'check_box' : 'check_box_outline_blank' }}
+              </mat-icon>
+              <span class="menu-item-name">Delta (&Delta;)</span>
+              <span class="greek-desc-chip">Price Sensitivity</span>
+            </button>
+            <button mat-menu-item (click)="toggleGreek('theta', $event)">
+              <mat-icon class="menu-icon-state" [class.icon-active]="showGreeks() && showTheta()">
+                {{ showGreeks() && showTheta() ? 'check_box' : 'check_box_outline_blank' }}
+              </mat-icon>
+              <span class="menu-item-name">Theta (&Theta;)</span>
+              <span class="greek-desc-chip">Daily Decay</span>
+            </button>
+            <button mat-menu-item (click)="toggleGreek('gamma', $event)">
+              <mat-icon class="menu-icon-state" [class.icon-active]="showGreeks() && showGamma()">
+                {{ showGreeks() && showGamma() ? 'check_box' : 'check_box_outline_blank' }}
+              </mat-icon>
+              <span class="menu-item-name">Gamma (&Gamma;)</span>
+              <span class="greek-desc-chip">Delta Accel</span>
+            </button>
+            <button mat-menu-item (click)="toggleGreek('vega', $event)">
+              <mat-icon class="menu-icon-state" [class.icon-active]="showGreeks() && showVega()">
+                {{ showGreeks() && showVega() ? 'check_box' : 'check_box_outline_blank' }}
+              </mat-icon>
+              <span class="menu-item-name">Vega (&nu;)</span>
+              <span class="greek-desc-chip">1% IV Chg</span>
+            </button>
+            <div class="menu-divider"></div>
+            <div class="menu-section-header">QUICK PRESETS</div>
+            <button mat-menu-item (click)="setGreekPreset('all')">
+              <mat-icon>select_all</mat-icon>
+              <span>Show All 4 Greeks (Both Sides)</span>
+            </button>
+            <button mat-menu-item (click)="setGreekPreset('delta_theta')">
+              <mat-icon>speed</mat-icon>
+              <span>Delta &amp; Theta Only</span>
+            </button>
+            <button mat-menu-item (click)="setGreekPreset('delta_only')">
+              <mat-icon>trending_up</mat-icon>
+              <span>Delta Only</span>
+            </button>
+            <button mat-menu-item (click)="setGreekPreset('none')">
+              <mat-icon>visibility_off</mat-icon>
+              <span>Hide All Greeks (Both Sides)</span>
+            </button>
+          </mat-menu>
+        </div>
       </div>
 
       <!-- Right Quick Actions -->
@@ -92,15 +182,21 @@
         </button>
 
         <!-- Option Greeks Toggle Button -->
-        <button class="action-btn toggle-badge-btn" [class.active-btn]="showGreeks()" (click)="toggleGreeks()" matTooltip="Toggle Option Greeks (Delta, Theta, Gamma, Vega)">
+        <button class="action-btn toggle-badge-btn" [class.active-btn]="showGreeks()" [matMenuTriggerFor]="greeksMenu" matTooltip="Option Greeks Selection (Delta, Theta, Gamma, Vega)">
           <mat-icon class="action-icon">functions</mat-icon>
-          <span class="action-text">Greeks <span class="mini-status" [class.status-on]="showGreeks()">{{ showGreeks() ? 'ON' : 'OFF' }}</span></span>
+          <span class="action-text">Greeks <span class="mini-status" [class.status-on]="showGreeks()">{{ getGreeksStatusBadge() }}</span></span>
         </button>
 
         <!-- Bid/Ask Columns Toggle Button -->
         <button class="action-btn toggle-badge-btn" [class.active-btn]="showBidAsk()" (click)="toggleBidAsk()" matTooltip="Toggle Bid & Ask Quote Columns">
           <mat-icon class="action-icon">view_column</mat-icon>
           <span class="action-text">Bid/Ask <span class="mini-status" [class.status-on]="showBidAsk()">{{ showBidAsk() ? 'ON' : 'OFF' }}</span></span>
+        </button>
+
+        <!-- Row Density Toggle Button (Compact for Maximum Rows / Normal / Comfortable) -->
+        <button class="action-btn toggle-badge-btn" [class.active-btn]="density() === 'compact'" (click)="toggleDensity()" matTooltip="Toggle Row Density: Compact (Show Maximum Rows) / Normal / Comfortable">
+          <mat-icon class="action-icon">table_rows</mat-icon>
+          <span class="action-text">Density <span class="mini-status" [class.status-on]="density() === 'compact'">{{ density() === 'compact' ? 'COMPACT' : (density() | uppercase) }}</span></span>
         </button>
 
         <button class="action-btn" (click)="openOIChart()" matTooltip="View OI Analysis Charts">
@@ -153,6 +249,10 @@
           <button mat-menu-item (click)="toggleBidAsk()">
             <mat-icon>{{ showBidAsk() ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
             <span>Show Bid & Ask Quote Columns</span>
+          </button>
+          <button mat-menu-item (click)="toggleDensity()">
+            <mat-icon>table_rows</mat-icon>
+            <span>Row Spacing: {{ density() | titlecase }} ({{ density() === 'compact' ? 'Max Rows' : 'Standard' }})</span>
           </button>
           <button mat-menu-item (click)="toggleAutoRefresh()">
             <mat-icon>{{ autoRefreshEnabled() ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
@@ -237,16 +337,41 @@
 
   <!-- Option Chain Table -->
   <div *ngIf="!isLoading() && optionChainData()" class="table-scroll-wrapper">
-    <table class="light-option-table">
+    <table class="light-option-table" [ngClass]="'density-' + density()">
       <thead>
-        <!-- Top Group Header (CALLS vs PUTS vs PCR) -->
+        <!-- Top Group Header (CALLS vs PUTS vs PCR) with Direct Show/Hide Greeks Option -->
         <tr class="header-group-row">
           <th [attr.colspan]="callsColspan()" class="group-call-header">
-            <span class="group-title calls-title">CALLS</span>
+            <div class="group-title-with-actions">
+              <span class="group-title calls-title">CALLS</span>
+              <button class="section-greek-toggle-btn"
+                      (click)="toggleCallsGreeks($event)"
+                      [class.btn-active]="showGreeks() && showCallsGreeks()"
+                      matTooltip="Show/Hide Option Greeks on Calls Side">
+                <mat-icon class="btn-icon">functions</mat-icon>
+                <span>Greeks: {{ (showGreeks() && showCallsGreeks()) ? 'ON' : 'OFF' }}</span>
+              </button>
+            </div>
           </th>
-          <th class="group-strike-header"></th>
+          <th class="group-strike-header">
+            <button class="both-greeks-quick-btn"
+                    (click)="toggleBothSidesGreeks($event)"
+                    [class.both-on]="showGreeks() && showCallsGreeks() && showPutsGreeks()"
+                    matTooltip="Toggle Option Greeks on Both Sides">
+              GREEKS: {{ (showGreeks() && showCallsGreeks() && showPutsGreeks()) ? 'BOTH ON' : 'TOGGLE' }}
+            </button>
+          </th>
           <th [attr.colspan]="putsColspan()" class="group-put-header">
-            <span class="group-title puts-title">PUTS</span>
+            <div class="group-title-with-actions">
+              <button class="section-greek-toggle-btn"
+                      (click)="togglePutsGreeks($event)"
+                      [class.btn-active]="showGreeks() && showPutsGreeks()"
+                      matTooltip="Show/Hide Option Greeks on Puts Side">
+                <mat-icon class="btn-icon">functions</mat-icon>
+                <span>Greeks: {{ (showGreeks() && showPutsGreeks()) ? 'ON' : 'OFF' }}</span>
+              </button>
+              <span class="group-title puts-title">PUTS</span>
+            </div>
           </th>
           <th *ngIf="showPCR()" colspan="2" class="group-pcr-header">
             <span class="group-title pcr-title">PCR</span>
@@ -259,12 +384,17 @@
           <th class="th-call" (click)="sortBy('volume')">VOLUME</th>
           <th class="th-call">IV</th>
 
-          <!-- Calls Greeks (Optional) -->
-          <ng-container *ngIf="showGreeks()">
-            <th class="th-call th-greek" matTooltip="Call Delta">DELTA</th>
-            <th class="th-call th-greek" matTooltip="Call Theta (per day)">THETA</th>
-            <th class="th-call th-greek" matTooltip="Gamma">GAMMA</th>
-            <th class="th-call th-greek" matTooltip="Vega (per 1% IV)">VEGA</th>
+          <!-- Calls Greeks (Optional - with in-section hide option) -->
+          <ng-container *ngIf="showGreeks() && showCallsGreeks()">
+            <th *ngIf="showDelta()" class="th-call th-greek" matTooltip="Call Delta">DELTA</th>
+            <th *ngIf="showTheta()" class="th-call th-greek" matTooltip="Call Theta (per day)">THETA</th>
+            <th *ngIf="showGamma()" class="th-call th-greek" matTooltip="Gamma">GAMMA</th>
+            <th *ngIf="showVega()" class="th-call th-greek th-greek-actionable" matTooltip="Vega (per 1% IV) - Click ✕ to Hide Calls Greeks">
+              <div class="greek-th-flex">
+                <span>VEGA</span>
+                <span class="greek-close-badge" (click)="toggleCallsGreeks($event)" matTooltip="Hide Calls Greeks">✕</span>
+              </div>
+            </th>
           </ng-container>
 
           <th class="th-call">LTP</th>
@@ -295,12 +425,17 @@
           <th class="th-put">CHNG</th>
           <th class="th-put">LTP</th>
 
-          <!-- Puts Greeks (Optional) -->
-          <ng-container *ngIf="showGreeks()">
-            <th class="th-put th-greek" matTooltip="Put Delta">DELTA</th>
-            <th class="th-put th-greek" matTooltip="Put Theta (per day)">THETA</th>
-            <th class="th-put th-greek" matTooltip="Gamma">GAMMA</th>
-            <th class="th-put th-greek" matTooltip="Vega (per 1% IV)">VEGA</th>
+          <!-- Puts Greeks (Optional - with in-section hide option) -->
+          <ng-container *ngIf="showGreeks() && showPutsGreeks()">
+            <th *ngIf="showDelta()" class="th-put th-greek th-greek-actionable" matTooltip="Put Delta - Click ✕ to Hide Puts Greeks">
+              <div class="greek-th-flex">
+                <span class="greek-close-badge" (click)="togglePutsGreeks($event)" matTooltip="Hide Puts Greeks">✕</span>
+                <span>DELTA</span>
+              </div>
+            </th>
+            <th *ngIf="showTheta()" class="th-put th-greek" matTooltip="Put Theta (per day)">THETA</th>
+            <th *ngIf="showGamma()" class="th-put th-greek" matTooltip="Gamma">GAMMA</th>
+            <th *ngIf="showVega()" class="th-put th-greek" matTooltip="Vega (per 1% IV)">VEGA</th>
           </ng-container>
 
           <th class="th-put">IV</th>
@@ -358,20 +493,20 @@
           </td>
 
           <!-- 5-8. CALLS GREEKS (Optional) -->
-          <ng-container *ngIf="showGreeks()">
-            <td class="cell-call align-center cell-greek" [class.itm-bg]="isITMCall(strike.strikePrice)">
+          <ng-container *ngIf="showGreeks() && showCallsGreeks()">
+            <td *ngIf="showDelta()" class="cell-call align-center cell-greek" [class.itm-bg]="isITMCall(strike.strikePrice)">
               <span class="greek-val delta-val pos-greek" *ngIf="strike.ce">{{ getGreekDelta(strike.strikePrice, strike.ce, 'CE', strike.pe) }}</span>
               <span *ngIf="!strike.ce">-</span>
             </td>
-            <td class="cell-call align-center cell-greek" [class.itm-bg]="isITMCall(strike.strikePrice)">
+            <td *ngIf="showTheta()" class="cell-call align-center cell-greek" [class.itm-bg]="isITMCall(strike.strikePrice)">
               <span class="greek-val theta-val neg-greek" *ngIf="strike.ce">{{ getGreekTheta(strike.strikePrice, strike.ce, 'CE', strike.pe) }}</span>
               <span *ngIf="!strike.ce">-</span>
             </td>
-            <td class="cell-call align-center cell-greek" [class.itm-bg]="isITMCall(strike.strikePrice)">
+            <td *ngIf="showGamma()" class="cell-call align-center cell-greek" [class.itm-bg]="isITMCall(strike.strikePrice)">
               <span class="greek-val gamma-val" *ngIf="strike.ce">{{ getGreekGamma(strike.strikePrice, strike.ce, 'CE', strike.pe) }}</span>
               <span *ngIf="!strike.ce">-</span>
             </td>
-            <td class="cell-call align-center cell-greek" [class.itm-bg]="isITMCall(strike.strikePrice)">
+            <td *ngIf="showVega()" class="cell-call align-center cell-greek" [class.itm-bg]="isITMCall(strike.strikePrice)">
               <span class="greek-val vega-val" *ngIf="strike.ce">{{ getGreekVega(strike.strikePrice, strike.ce, 'CE', strike.pe) }}</span>
               <span *ngIf="!strike.ce">-</span>
             </td>
@@ -411,20 +546,12 @@
             </td>
           </ng-container>
 
-          <!-- STRIKE PRICE (CENTER WITH POSITION INDICATORS & S/R BREAKOUT BADGES) -->
+          <!-- STRIKE PRICE (CENTER: SINGLE-LINE ULTRA-COMPACT WITH ATM & S/R BADGES) -->
           <td class="cell-strike align-center">
-            <div class="strike-cell-inner">
+            <div class="strike-main-line">
               <span class="blue-link strike-link">{{ formatDecimal(strike.strikePrice, 2) }}</span>
-              <div class="strike-subtag" *ngIf="isATMStrike(strike.strikePrice)">
-                <span class="badge-tag atm-tag">ATM</span>
-              </div>
-              <!-- Dynamic S1/R1 Holding vs Breaking Badge -->
-              <div class="strike-subtag sr-subtag" *ngIf="getStrikeSRBadge(strike.strikePrice) as srBadge">
-                <span class="badge-tag" [ngClass]="srBadge.badgeClass" [matTooltip]="srBadge.tooltip">{{ srBadge.text }}</span>
-              </div>
-              <div class="strike-subtag pos-subtag" *ngIf="!isATMStrike(strike.strikePrice) && !getStrikeSRBadge(strike.strikePrice)">
-                <span class="position-text">{{ getStrikePosition(strike.strikePrice) === 'BELOW' ? '▼ Below' : '▲ Above' }}</span>
-              </div>
+              <span class="badge-tag atm-tag" *ngIf="isATMStrike(strike.strikePrice)">ATM</span>
+              <span class="badge-tag sr-micro-badge" *ngIf="getStrikeSRBadge(strike.strikePrice) as srBadge" [ngClass]="srBadge.badgeClass" [matTooltip]="srBadge.tooltip">{{ srBadge.compactText }}</span>
             </div>
           </td>
 
@@ -464,20 +591,20 @@
           </td>
 
           <!-- PUTS GREEKS (Optional) -->
-          <ng-container *ngIf="showGreeks()">
-            <td class="cell-put align-center cell-greek" [class.itm-bg]="isITMPut(strike.strikePrice)">
+          <ng-container *ngIf="showGreeks() && showPutsGreeks()">
+            <td *ngIf="showDelta()" class="cell-put align-center cell-greek" [class.itm-bg]="isITMPut(strike.strikePrice)">
               <span class="greek-val delta-val neg-greek" *ngIf="strike.pe">{{ getGreekDelta(strike.strikePrice, strike.pe, 'PE', strike.ce) }}</span>
               <span *ngIf="!strike.pe">-</span>
             </td>
-            <td class="cell-put align-center cell-greek" [class.itm-bg]="isITMPut(strike.strikePrice)">
+            <td *ngIf="showTheta()" class="cell-put align-center cell-greek" [class.itm-bg]="isITMPut(strike.strikePrice)">
               <span class="greek-val theta-val neg-greek" *ngIf="strike.pe">{{ getGreekTheta(strike.strikePrice, strike.pe, 'PE', strike.ce) }}</span>
               <span *ngIf="!strike.pe">-</span>
             </td>
-            <td class="cell-put align-center cell-greek" [class.itm-bg]="isITMPut(strike.strikePrice)">
+            <td *ngIf="showGamma()" class="cell-put align-center cell-greek" [class.itm-bg]="isITMPut(strike.strikePrice)">
               <span class="greek-val gamma-val" *ngIf="strike.pe">{{ getGreekGamma(strike.strikePrice, strike.pe, 'PE', strike.ce) }}</span>
               <span *ngIf="!strike.pe">-</span>
             </td>
-            <td class="cell-put align-center cell-greek" [class.itm-bg]="isITMPut(strike.strikePrice)">
+            <td *ngIf="showVega()" class="cell-put align-center cell-greek" [class.itm-bg]="isITMPut(strike.strikePrice)">
               <span class="greek-val vega-val" *ngIf="strike.pe">{{ getGreekVega(strike.strikePrice, strike.pe, 'PE', strike.ce) }}</span>
               <span *ngIf="!strike.pe">-</span>
             </td>
@@ -564,12 +691,12 @@
           <!-- 4. IV -->
           <td class="cell-call align-center total-cell">-</td>
 
-          <!-- 5-8. Greeks dashes (if showGreeks) -->
-          <ng-container *ngIf="showGreeks()">
-            <td class="cell-call align-center total-cell">-</td>
-            <td class="cell-call align-center total-cell">-</td>
-            <td class="cell-call align-center total-cell">-</td>
-            <td class="cell-call align-center total-cell">-</td>
+          <!-- 5-8. Greeks dashes (if showGreeks && showCallsGreeks) -->
+          <ng-container *ngIf="showGreeks() && showCallsGreeks()">
+            <td *ngIf="showDelta()" class="cell-call align-center total-cell">-</td>
+            <td *ngIf="showTheta()" class="cell-call align-center total-cell">-</td>
+            <td *ngIf="showGamma()" class="cell-call align-center total-cell">-</td>
+            <td *ngIf="showVega()" class="cell-call align-center total-cell">-</td>
           </ng-container>
 
           <!-- LTP & CHNG -->
@@ -604,12 +731,12 @@
           <td class="cell-put align-center total-cell">-</td>
           <td class="cell-put align-center total-cell">-</td>
 
-          <!-- Greeks dashes (if showGreeks) -->
-          <ng-container *ngIf="showGreeks()">
-            <td class="cell-put align-center total-cell">-</td>
-            <td class="cell-put align-center total-cell">-</td>
-            <td class="cell-put align-center total-cell">-</td>
-            <td class="cell-put align-center total-cell">-</td>
+          <!-- Greeks dashes (if showGreeks && showPutsGreeks) -->
+          <ng-container *ngIf="showGreeks() && showPutsGreeks()">
+            <td *ngIf="showDelta()" class="cell-put align-center total-cell">-</td>
+            <td *ngIf="showTheta()" class="cell-put align-center total-cell">-</td>
+            <td *ngIf="showGamma()" class="cell-put align-center total-cell">-</td>
+            <td *ngIf="showVega()" class="cell-put align-center total-cell">-</td>
           </ng-container>
 
           <!-- IV -->

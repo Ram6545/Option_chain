@@ -83,11 +83,40 @@ export class OptionChainComponent implements OnInit, OnDestroy {
   // Column display controls (Option Greeks, Bid/Ask Quote Columns & PCR Analysis)
   showBidAsk = signal<boolean>(false);
   showGreeks = signal<boolean>(true);
+  showCallsGreeks = signal<boolean>(true);
+  showPutsGreeks = signal<boolean>(true);
+  showDelta = signal<boolean>(true);
+  showTheta = signal<boolean>(true);
+  showGamma = signal<boolean>(true);
+  showVega = signal<boolean>(true);
   showPCR = signal<boolean>(true);
 
-  // Group header colspans
-  callsColspan = computed(() => 6 + (this.showGreeks() ? 4 : 0) + (this.showBidAsk() ? 4 : 0));
-  putsColspan = computed(() => 6 + (this.showGreeks() ? 4 : 0) + (this.showBidAsk() ? 4 : 0));
+  // Table row density control ('compact' shows maximum rows with reduced padding, 'normal', 'comfortable')
+  density = signal<'compact' | 'normal' | 'comfortable'>('compact');
+
+  // Active Greeks count & side-specific counts for accurate table colspan calculation
+  activeGreeksCount = computed(() => {
+    let count = 0;
+    if (this.showDelta()) count++;
+    if (this.showTheta()) count++;
+    if (this.showGamma()) count++;
+    if (this.showVega()) count++;
+    return count;
+  });
+
+  callsGreeksCount = computed(() => {
+    if (!this.showGreeks() || !this.showCallsGreeks()) return 0;
+    return this.activeGreeksCount();
+  });
+
+  putsGreeksCount = computed(() => {
+    if (!this.showGreeks() || !this.showPutsGreeks()) return 0;
+    return this.activeGreeksCount();
+  });
+
+  // Group header colspans (Dynamic based on visible columns)
+  callsColspan = computed(() => 6 + this.callsGreeksCount() + (this.showBidAsk() ? 4 : 0));
+  putsColspan = computed(() => 6 + this.putsGreeksCount() + (this.showBidAsk() ? 4 : 0));
 
   // NSE strike price & metadata signals
   strikePrices = signal<number[] | null>(null);
@@ -590,7 +619,7 @@ export class OptionChainComponent implements OnInit, OnDestroy {
   });
 
   // Helper for row-level S/R Breakout indicator tag
-  getStrikeSRBadge(strikePrice: number): { text: string; badgeClass: string; tooltip: string } | null {
+  getStrikeSRBadge(strikePrice: number): { text: string; compactText: string; badgeClass: string; tooltip: string } | null {
     const sInfo = this.strongSupportInfo();
     const rInfo = this.strongResistanceInfo();
 
@@ -600,12 +629,14 @@ export class OptionChainComponent implements OnInit, OnDestroy {
       if (status.isBreaking) {
         return {
           text: '⚡ S1 BREAKING (UNWINDING)',
+          compactText: '⚡ S1 BRK',
           badgeClass: 'badge-s-breaking',
           tooltip: `Support ${strikePrice} is BREAKING! Put writers are unwinding/exiting.`
         };
       } else {
         return {
           text: sInfo.isConfluent ? '⭐ STRONG SUPPORT (OI + VOL)' : '🛡️ STRONG SUPPORT (MAX OI)',
+          compactText: sInfo.isConfluent ? '⭐ S1' : '🛡️ S1',
           badgeClass: sInfo.isConfluent ? 'badge-s-confluent' : 'badge-s-holding',
           tooltip: sInfo.isConfluent
             ? `Ultra-Strong Support at ${strikePrice}! Both Highest Put OI and Highest Volume coincide here.`
@@ -617,6 +648,7 @@ export class OptionChainComponent implements OnInit, OnDestroy {
     if (!sInfo.isConfluent && strikePrice === sInfo.volStrike && strikePrice > 0) {
       return {
         text: '🌊 VOL SUPPORT (MAX VOL)',
+        compactText: '🌊 S-VOL',
         badgeClass: 'badge-vol-support',
         tooltip: `Volume Support at ${strikePrice}! Highest Put Traded Volume.`
       };
@@ -628,12 +660,14 @@ export class OptionChainComponent implements OnInit, OnDestroy {
       if (status.isBreaking) {
         return {
           text: '🔥 R1 BREAKING (SHORT COVERING)',
+          compactText: '🔥 R1 BRK',
           badgeClass: 'badge-r-breaking',
           tooltip: `Resistance ${strikePrice} is BREAKING! Call writers are covering/panicking.`
         };
       } else {
         return {
           text: rInfo.isConfluent ? '⭐ STRONG RESISTANCE (OI + VOL)' : '🛑 STRONG RESISTANCE (MAX OI)',
+          compactText: rInfo.isConfluent ? '⭐ R1' : '🛑 R1',
           badgeClass: rInfo.isConfluent ? 'badge-r-confluent' : 'badge-r-holding',
           tooltip: rInfo.isConfluent
             ? `Ultra-Strong Resistance at ${strikePrice}! Both Highest Call OI and Highest Volume coincide here.`
@@ -645,6 +679,7 @@ export class OptionChainComponent implements OnInit, OnDestroy {
     if (!rInfo.isConfluent && strikePrice === rInfo.volStrike && strikePrice > 0) {
       return {
         text: '🌊 VOL RESISTANCE (MAX VOL)',
+        compactText: '🌊 R-VOL',
         badgeClass: 'badge-vol-resistance',
         tooltip: `Volume Resistance at ${strikePrice}! Highest Call Traded Volume.`
       };
@@ -1118,13 +1153,201 @@ export class OptionChainComponent implements OnInit, OnDestroy {
   }
 
   toggleGreeks(): void {
-    this.showGreeks.set(!this.showGreeks());
-    this.snackBar.open(`Option Greeks ${this.showGreeks() ? 'Shown' : 'Hidden'}`, 'Close', { duration: 1500 });
+    const next = !this.showGreeks();
+    this.showGreeks.set(next);
+    if (next) {
+      if (!this.showCallsGreeks() && !this.showPutsGreeks()) {
+        this.showCallsGreeks.set(true);
+        this.showPutsGreeks.set(true);
+      }
+      if (this.activeGreeksCount() === 0) {
+        this.showDelta.set(true);
+        this.showTheta.set(true);
+        this.showGamma.set(true);
+        this.showVega.set(true);
+      }
+      this.snackBar.open('Option Greeks Shown (Both Sides)', 'Close', { duration: 1500 });
+    } else {
+      this.snackBar.open('Option Greeks Hidden', 'Close', { duration: 1500 });
+    }
+  }
+
+  toggleBothSidesGreeks(event?: Event): void {
+    if (event) event.stopPropagation();
+    const bothOn = this.showGreeks() && this.showCallsGreeks() && this.showPutsGreeks();
+    if (bothOn) {
+      this.showGreeks.set(false);
+      this.snackBar.open('Greeks Hidden on Both Sides', 'Close', { duration: 1500 });
+    } else {
+      this.showGreeks.set(true);
+      this.showCallsGreeks.set(true);
+      this.showPutsGreeks.set(true);
+      if (this.activeGreeksCount() === 0) {
+        this.showDelta.set(true);
+        this.showTheta.set(true);
+        this.showGamma.set(true);
+        this.showVega.set(true);
+      }
+      this.snackBar.open('Greeks Shown on Both Sides', 'Close', { duration: 1500 });
+    }
+  }
+
+  toggleCallsGreeks(event?: Event): void {
+    if (event) event.stopPropagation();
+    if (!this.showGreeks()) {
+      this.showGreeks.set(true);
+      this.showCallsGreeks.set(true);
+      if (this.activeGreeksCount() === 0) {
+        this.showDelta.set(true);
+        this.showTheta.set(true);
+        this.showGamma.set(true);
+        this.showVega.set(true);
+      }
+      this.snackBar.open('Calls Greeks Shown', 'Close', { duration: 1500 });
+      return;
+    }
+    const newVal = !this.showCallsGreeks();
+    this.showCallsGreeks.set(newVal);
+    if (!newVal && !this.showPutsGreeks()) {
+      this.showGreeks.set(false);
+      this.snackBar.open('All Greeks Hidden', 'Close', { duration: 1500 });
+    } else {
+      this.snackBar.open(`Calls Greeks ${newVal ? 'Shown' : 'Hidden'}`, 'Close', { duration: 1500 });
+    }
+  }
+
+  togglePutsGreeks(event?: Event): void {
+    if (event) event.stopPropagation();
+    if (!this.showGreeks()) {
+      this.showGreeks.set(true);
+      this.showPutsGreeks.set(true);
+      if (this.activeGreeksCount() === 0) {
+        this.showDelta.set(true);
+        this.showTheta.set(true);
+        this.showGamma.set(true);
+        this.showVega.set(true);
+      }
+      this.snackBar.open('Puts Greeks Shown', 'Close', { duration: 1500 });
+      return;
+    }
+    const newVal = !this.showPutsGreeks();
+    this.showPutsGreeks.set(newVal);
+    if (!newVal && !this.showCallsGreeks()) {
+      this.showGreeks.set(false);
+      this.snackBar.open('All Greeks Hidden', 'Close', { duration: 1500 });
+    } else {
+      this.snackBar.open(`Puts Greeks ${newVal ? 'Shown' : 'Hidden'}`, 'Close', { duration: 1500 });
+    }
+  }
+
+  toggleGreek(greek: 'delta' | 'theta' | 'gamma' | 'vega', event?: Event): void {
+    if (event) event.stopPropagation();
+    if (!this.showGreeks()) {
+      this.showGreeks.set(true);
+      if (!this.showCallsGreeks() && !this.showPutsGreeks()) {
+        this.showCallsGreeks.set(true);
+        this.showPutsGreeks.set(true);
+      }
+    }
+    switch (greek) {
+      case 'delta':
+        this.showDelta.set(!this.showDelta());
+        this.snackBar.open(`Delta ${this.showDelta() ? 'Shown' : 'Hidden'}`, 'Close', { duration: 1500 });
+        break;
+      case 'theta':
+        this.showTheta.set(!this.showTheta());
+        this.snackBar.open(`Theta ${this.showTheta() ? 'Shown' : 'Hidden'}`, 'Close', { duration: 1500 });
+        break;
+      case 'gamma':
+        this.showGamma.set(!this.showGamma());
+        this.snackBar.open(`Gamma ${this.showGamma() ? 'Shown' : 'Hidden'}`, 'Close', { duration: 1500 });
+        break;
+      case 'vega':
+        this.showVega.set(!this.showVega());
+        this.snackBar.open(`Vega ${this.showVega() ? 'Shown' : 'Hidden'}`, 'Close', { duration: 1500 });
+        break;
+    }
+  }
+
+  setGreekPreset(preset: 'all' | 'delta_theta' | 'delta_only' | 'none'): void {
+    if (preset === 'none') {
+      this.showGreeks.set(false);
+      this.snackBar.open('All Greeks Hidden', 'Close', { duration: 1500 });
+      return;
+    }
+    this.showGreeks.set(true);
+    this.showCallsGreeks.set(true);
+    this.showPutsGreeks.set(true);
+    if (preset === 'all') {
+      this.showDelta.set(true);
+      this.showTheta.set(true);
+      this.showGamma.set(true);
+      this.showVega.set(true);
+      this.snackBar.open('Showing All 4 Greeks (Both Sides)', 'Close', { duration: 1500 });
+    } else if (preset === 'delta_theta') {
+      this.showDelta.set(true);
+      this.showTheta.set(true);
+      this.showGamma.set(false);
+      this.showVega.set(false);
+      this.snackBar.open('Showing Delta & Theta (Both Sides)', 'Close', { duration: 1500 });
+    } else if (preset === 'delta_only') {
+      this.showDelta.set(true);
+      this.showTheta.set(false);
+      this.showGamma.set(false);
+      this.showVega.set(false);
+      this.snackBar.open('Showing Delta Only (Both Sides)', 'Close', { duration: 1500 });
+    }
+  }
+
+  getGreeksLabel(): string {
+    if (!this.showGreeks() || (!this.showCallsGreeks() && !this.showPutsGreeks()) || this.activeGreeksCount() === 0) {
+      return 'Greeks: Hidden';
+    }
+    const both = this.showCallsGreeks() && this.showPutsGreeks();
+    const count = this.activeGreeksCount();
+    if (both) {
+      if (count === 4) return 'Both Sides (All 4)';
+      if (count === 2 && this.showDelta() && this.showTheta()) return 'Both (Δ, θ)';
+      if (count === 1 && this.showDelta()) return 'Both (Δ Only)';
+      return `Both Sides (${count} Greeks)`;
+    }
+    if (this.showCallsGreeks()) return `Calls Side (${count})`;
+    return `Puts Side (${count})`;
+  }
+
+  getGreeksStatusBadge(): string {
+    if (!this.showGreeks() || (!this.showCallsGreeks() && !this.showPutsGreeks()) || this.activeGreeksCount() === 0) {
+      return 'OFF';
+    }
+    if (this.showCallsGreeks() && this.showPutsGreeks()) {
+      return 'BOTH';
+    }
+    if (this.showCallsGreeks()) return 'CALLS';
+    return 'PUTS';
   }
 
   togglePCR(): void {
     this.showPCR.set(!this.showPCR());
     this.snackBar.open(`PCR Columns ${this.showPCR() ? 'Shown' : 'Hidden'}`, 'Close', { duration: 1500 });
+  }
+
+  toggleDensity(): void {
+    const cur = this.density();
+    if (cur === 'compact') {
+      this.density.set('normal');
+      this.snackBar.open('Row Density: Normal', 'Close', { duration: 1500 });
+    } else if (cur === 'normal') {
+      this.density.set('comfortable');
+      this.snackBar.open('Row Density: Comfortable (Spacious)', 'Close', { duration: 1500 });
+    } else {
+      this.density.set('compact');
+      this.snackBar.open('Row Density: Compact (Showing More Rows)', 'Close', { duration: 1500 });
+    }
+  }
+
+  setDensity(level: 'compact' | 'normal' | 'comfortable'): void {
+    this.density.set(level);
+    this.snackBar.open(`Row Density: ${level.toUpperCase()}`, 'Close', { duration: 1500 });
   }
 
   // ================= OPTION GREEKS (Black-Scholes Model) =================
