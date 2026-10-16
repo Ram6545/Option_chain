@@ -80,10 +80,18 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
   private lastScrolledATMKey = '';
 
   // Collapsible configuration to keep playback controls and table in viewport simultaneously
-  isConfigCollapsed = signal<boolean>(false);
+  isConfigCollapsed = signal<boolean>(true);
+  isTableCollapsed = signal<boolean>(false);
+
+  // Strike Step (50 for NIFTY/FINNIFTY, 100 for BANKNIFTY)
+  strikeStep = computed(() => (this.symbol() === 'BANKNIFTY' ? 100 : 50));
 
   toggleConfigCollapse(): void {
     this.isConfigCollapsed.update((v) => !v);
+  }
+
+  toggleTableCollapse(): void {
+    this.isTableCollapsed.update((v) => !v);
   }
 
   constructor() {

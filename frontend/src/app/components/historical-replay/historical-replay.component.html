@@ -1,254 +1,241 @@
 <div class="historical-replay-container">
-  <!-- Dual-Clock & Live Synchronization Master Banner -->
-  <div class="replay-watermark-banner">
-    <div class="banner-left">
-      <div class="replay-badge" [class.live-mode]="isLiveSync()" [class.manual-mode]="!isLiveSync()">
-        <span class="pulsing-record-dot" [class.live-pulse]="isLiveSync() || isPlaying()"></span>
-        <span class="badge-title">{{ isLiveSync() ? 'LIVE SYNC: ON' : 'MANUAL REPLAY' }}</span>
+  <!-- 1. Ultra-Compact Replay Session Setup Bar -->
+  <div class="session-strip">
+    <div class="strip-left">
+      <!-- Index Selector -->
+      <div class="strip-item">
+        <label class="strip-label">INDEX</label>
+        <select class="strip-select" [value]="symbol()" (change)="changeSymbol($any($event.target).value)">
+          <option value="NIFTY">NIFTY</option>
+          <option value="BANKNIFTY">BANKNIFTY</option>
+          <option value="FINNIFTY">FINNIFTY</option>
+        </select>
       </div>
 
-      <div class="sync-status-box">
-        <mat-icon class="sync-icon">{{ isLiveSync() ? 'sync' : 'tune' }}</mat-icon>
-        <span class="sync-text">
-          {{ isLiveSync() ? 'Real-time synchronized with live market clock' : 'Manual timeline inspection mode' }}
-        </span>
-        @if (!isLiveSync()) {
-          <button mat-stroked-button class="resume-sync-btn" (click)="resumeLiveSync()" matTooltip="Snap back and follow live market time">
-            <mat-icon>play_circle</mat-icon>
-            <span>Resume Live Sync</span>
-          </button>
+      <!-- Historical Date Selector -->
+      <div class="strip-item">
+        <label class="strip-label">DATE</label>
+        @if (availableDates().length > 0) {
+          <select class="strip-select" [value]="selectedDate()" (change)="onDateChange($any($event.target).value)" [disabled]="isPlaying()">
+            @for (d of availableDates(); track d) {
+              <option [value]="d">{{ d === todayISODate ? d + ' (Today)' : d }}</option>
+            }
+          </select>
+        } @else {
+          <input type="date" class="strip-input" [ngModel]="selectedDate()" (ngModelChange)="onDateChange($event)" [disabled]="isPlaying()" />
         }
+      </div>
+
+      <!-- Expiry Selector -->
+      <div class="strip-item">
+        <label class="strip-label">EXPIRY</label>
+        <select class="strip-select" [value]="selectedExpiry()" (change)="onExpiryChange($any($event.target).value)" [disabled]="isPlaying()">
+          <option value="">Nearest / All</option>
+          @for (exp of availableExpiries(); track exp) {
+            <option [value]="exp">{{ exp }}</option>
+          }
+        </select>
+      </div>
+
+      <!-- Time Frame Button Group -->
+      <div class="strip-item tf-strip-item">
+        <label class="strip-label">TF</label>
+        <div class="tf-btn-group">
+          <button type="button" class="tf-pill" [class.active]="timeFrame() === 1" (click)="changeTimeFrame(1)" [disabled]="isPlaying()">1m</button>
+          <button type="button" class="tf-pill" [class.active]="timeFrame() === 3" (click)="changeTimeFrame(3)" [disabled]="isPlaying()">3m</button>
+          <button type="button" class="tf-pill" [class.active]="timeFrame() === 5" (click)="changeTimeFrame(5)" [disabled]="isPlaying()">5m</button>
+        </div>
+      </div>
+
+      <!-- Strike Window Selector -->
+      <div class="strip-item">
+        <label class="strip-label">WINDOW</label>
+        <select class="strip-select" [value]="strikeRange()" (change)="strikeRange.set(+$any($event.target).value)">
+          <option [value]="5">±5 Strikes</option>
+          <option [value]="10">±10 Strikes</option>
+          <option [value]="15">±15 Strikes</option>
+          <option [value]="25">±25 Strikes</option>
+        </select>
+      </div>
+
+      <!-- Load Session Button -->
+      <button
+        type="button"
+        class="strip-load-btn"
+        (click)="loadReplayData()"
+        [disabled]="isLoading() || isPlaying() || isNonTradingDay()"
+        matTooltip="Load Session for Selected Date & Parameters"
+      >
+        <mat-icon class="btn-icon" *ngIf="!isLoading()">cloud_download</mat-icon>
+        <mat-progress-spinner *ngIf="isLoading()" mode="indeterminate" diameter="13"></mat-progress-spinner>
+        <span>Load</span>
+      </button>
+
+      <!-- Advanced Time Range Expand Toggle -->
+      <button
+        type="button"
+        class="strip-tune-btn"
+        (click)="toggleConfigCollapse()"
+        [matTooltip]="isConfigCollapsed() ? 'Edit Time Range (09:15 → 15:30)' : 'Hide Time Range'"
+      >
+        <mat-icon>{{ isConfigCollapsed() ? 'tune' : 'expand_less' }}</mat-icon>
+      </button>
+
+      <!-- Inline Time Range Inputs (if expanded) -->
+      <div class="time-range-inline" *ngIf="!isConfigCollapsed()">
+        <input type="time" class="strip-time-input" [ngModel]="startTime()" (ngModelChange)="startTime.set($event)" [disabled]="isPlaying()" />
+        <span class="range-arrow">&rarr;</span>
+        <input type="time" class="strip-time-input" [ngModel]="endTime()" (ngModelChange)="endTime.set($event)" [disabled]="isPlaying()" />
       </div>
     </div>
 
-    <div class="banner-right">
-      <!-- Live Real-World Clock -->
-      <div class="stamp-chip live-clock-chip" matTooltip="Your actual real-world clock time">
-        <mat-icon class="clock-icon live-clock-icon">access_time</mat-icon>
-        <span class="chip-label">LIVE CLOCK</span>
-        <span class="chip-value live-clock-val">{{ liveClock().timeWithSeconds }}</span>
+    <div class="strip-right">
+      <!-- Non-Trading Day Warning Pill -->
+      @if (isNonTradingDay()) {
+        <div class="holiday-pill" [matTooltip]="dateValidation().reason" (click)="selectNearestValidDate()">
+          <mat-icon class="pill-icon">event_busy</mat-icon>
+          <span>Non-Trading Day (Click for {{ dateValidation().nearestValidDate }})</span>
+        </div>
+      }
+
+      <!-- Historical Date -->
+      <div class="strip-chip date-chip" matTooltip="Selected historical trading session">
+        <mat-icon class="chip-icon">calendar_today</mat-icon>
+        <span>{{ formattedHistoricalDate() }}</span>
       </div>
 
-      <!-- Historical Trading Date -->
-      <div class="stamp-chip date-chip" matTooltip="Selected historical trading session">
-        <mat-icon class="clock-icon">calendar_today</mat-icon>
-        <span class="chip-label">HISTORICAL DATE</span>
-        <span class="chip-value">{{ formattedHistoricalDate() }}</span>
+      <!-- Live Clock -->
+      <div class="strip-chip live-clock-chip" matTooltip="Your actual real-world clock time">
+        <span class="live-dot-pulse"></span>
+        <span class="live-clock-text">{{ liveClock().timeWithSeconds }}</span>
       </div>
 
-      <!-- Historical Market Clock -->
-      <div class="stamp-chip active-time-chip" matTooltip="Historical timestamp corresponding to market session elapsed time">
-        <mat-icon class="clock-icon">history_toggle_off</mat-icon>
-        <span class="chip-label">HISTORICAL TIME</span>
-        <span class="chip-value">{{ currentTimestamp() }}</span>
-      </div>
+      <!-- Toggle Table view -->
+      <button
+        type="button"
+        class="strip-table-toggle-btn"
+        [class.table-active]="!isTableCollapsed()"
+        (click)="toggleTableCollapse()"
+        matTooltip="Toggle Option Chain Table view"
+      >
+        <mat-icon class="btn-icon">{{ isTableCollapsed() ? 'table_view' : 'visibility_off' }}</mat-icon>
+        <span>{{ isTableCollapsed() ? 'Show Table' : 'Hide Table' }}</span>
+      </button>
+    </div>
+  </div>
 
-      <!-- Current Expiry -->
-      <div class="stamp-chip active-expiry-chip">
-        <mat-icon class="clock-icon">event_available</mat-icon>
-        <span class="chip-label">EXPIRY</span>
-        <span class="chip-value">{{ activeExpiry() || selectedExpiry() || 'All Expiries' }}</span>
+  <!-- 2. TOP SECTION: 4 Compact KPI Cards in a Single Horizontal Row (Matches Screenshot 2) -->
+  <div class="metrics-grid">
+    <!-- Card 1: NIFTY SPOT PRICE -->
+    <div class="metric-card spot-card">
+      <div class="metric-header">
+        <mat-icon class="metric-icon">trending_up</mat-icon>
+        <span class="metric-title">{{ symbol() }} SPOT PRICE</span>
+      </div>
+      <div class="metric-body">
+        <div class="body-left">
+          <span class="primary-val">{{ formatNumber(currentSpot()) }}</span>
+          <span
+            *ngIf="spotPctChange() as sp"
+            class="metric-pct-badge"
+            [class.pct-up]="sp.isIncrease"
+            [class.pct-down]="sp.isDecrease"
+            [matTooltip]="'Spot change vs ' + (previousTimestamp() || 'prev') + ': ' + sp.formatted"
+          >
+            {{ sp.formatted }}
+          </span>
+        </div>
+        <div class="body-right">
+          <span class="secondary-info">At Replay {{ currentTimestamp() }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 2: HISTORICAL ATM STRIKE -->
+    <div
+      class="metric-card atm-card clickable-atm-card"
+      (click)="scrollToATMStrike()"
+      matTooltip="Click to scroll directly to ATM Strike in the table"
+    >
+      <div class="metric-header">
+        <mat-icon class="metric-icon">gps_fixed</mat-icon>
+        <span class="metric-title">HISTORICAL ATM STRIKE</span>
+      </div>
+      <div class="metric-body">
+        <div class="body-left">
+          <span class="primary-val atm-val">{{ formatNumber(currentATM()) }}</span>
+          <span class="atm-indicator-dot" [class.live-pulse]="isLiveSync() || isPlaying()"></span>
+        </div>
+        <div class="body-right">
+          <span class="secondary-info">Strike Step: {{ strikeStep() }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 3: HISTORICAL PCR -->
+    <div class="metric-card pcr-card">
+      <div class="metric-header">
+        <mat-icon class="metric-icon">donut_large</mat-icon>
+        <span class="metric-title">HISTORICAL PCR</span>
+      </div>
+      <div class="metric-body">
+        <div class="body-left">
+          <span class="primary-val" [class.pcr-high]="currentPCR() >= 1" [class.pcr-low]="currentPCR() < 1">
+            {{ formatDecimal(currentPCR(), 2) }}
+          </span>
+          <span
+            *ngIf="pcrPctChange() as pp"
+            class="metric-pct-badge"
+            [class.pct-up]="pp.isIncrease"
+            [class.pct-down]="pp.isDecrease"
+            [matTooltip]="'PCR change vs ' + (previousTimestamp() || 'prev') + ': ' + pp.formatted"
+          >
+            {{ pp.formatted }}
+          </span>
+        </div>
+        <div class="body-right">
+          <span class="sentiment-badge" [ngClass]="getPCRSentiment(currentPCR()).class">
+            {{ getPCRSentiment(currentPCR()).label }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 4: AVERAGE PCR (ATM ±3) -->
+    <div class="metric-card avg-pcr-card">
+      <div class="metric-header">
+        <mat-icon class="metric-icon">stacked_line_chart</mat-icon>
+        <span class="metric-title">AVERAGE PCR (ATM &plusmn;3)</span>
+      </div>
+      <div class="metric-body">
+        <div class="body-left">
+          <span class="primary-val" [class.pcr-high]="currentAveragePCR() >= 1" [class.pcr-low]="currentAveragePCR() < 1">
+            {{ formatDecimal(currentAveragePCR(), 2) }}
+          </span>
+          <span
+            *ngIf="avgPcrPctChange() as ap"
+            class="metric-pct-badge"
+            [class.pct-up]="ap.isIncrease"
+            [class.pct-down]="ap.isDecrease"
+            [matTooltip]="'Avg PCR change vs ' + (previousTimestamp() || 'prev') + ': ' + ap.formatted"
+          >
+            {{ ap.formatted }}
+          </span>
+        </div>
+        <div class="body-right oi-breakdown">
+          <span class="secondary-info">Put OI: {{ formatNumber(totalPutOI()) }} / Call OI: {{ formatNumber(totalCallOI()) }}</span>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- Non-Trading Day Warning Banner (Weekends & Market Holidays) -->
-  @if (isNonTradingDay()) {
-    <div class="holiday-alert-banner">
-      <div class="alert-icon-wrap">
-        <mat-icon class="alert-icon">event_busy</mat-icon>
-      </div>
-      <div class="alert-content">
-        <span class="alert-title">Non-Trading Session Detected</span>
-        <span class="alert-desc">{{ dateValidation().reason }}</span>
-      </div>
-      @if (dateValidation().nearestValidDate) {
-        <button mat-flat-button color="accent" class="switch-date-btn" (click)="selectNearestValidDate()">
-          <mat-icon>arrow_back</mat-icon>
-          <span>Select Nearest Trading Day ({{ dateValidation().nearestValidDate }})</span>
-        </button>
-      }
-    </div>
-  }
-
-  <!-- Session Configuration Panel -->
-  <mat-card class="session-config-card" [class.collapsed]="isConfigCollapsed()">
-    <div class="config-header-row" (click)="toggleConfigCollapse()">
-      <div class="config-title-wrap">
-        <mat-icon class="toggle-arrow">{{ isConfigCollapsed() ? 'chevron_right' : 'expand_more' }}</mat-icon>
-        <span class="config-title">Session Setup</span>
-        <span class="config-summary-pills" *ngIf="isConfigCollapsed()">
-          <span class="summary-pill highlight">{{ symbol() }}</span>
-          <span class="summary-pill">{{ formattedHistoricalDate() }}</span>
-          <span class="summary-pill">Expiry: {{ activeExpiry() || selectedExpiry() || 'All' }}</span>
-          <span class="summary-pill">{{ timeFrame() }}m Frame</span>
-          <span class="summary-pill">&plusmn;{{ strikeRange() }} Strikes</span>
-        </span>
-      </div>
-      <button
-        mat-button
-        type="button"
-        class="collapse-toggle-btn"
-        (click)="$event.stopPropagation(); toggleConfigCollapse()"
-      >
-        <mat-icon>{{ isConfigCollapsed() ? 'tune' : 'unfold_less' }}</mat-icon>
-        <span>{{ isConfigCollapsed() ? 'Edit Setup' : 'Collapse' }}</span>
-      </button>
-    </div>
-
-    <div class="config-grid" *ngIf="!isConfigCollapsed()">
-      <!-- Index Selector -->
-      <div class="config-item">
-        <label class="item-label">Index</label>
-        <mat-form-field appearance="outline" density="compact" class="compact-field">
-          <mat-select [value]="symbol()" (selectionChange)="changeSymbol($event.value)">
-            <mat-option value="NIFTY">NIFTY</mat-option>
-            <mat-option value="BANKNIFTY">BANKNIFTY</mat-option>
-            <mat-option value="FINNIFTY">FINNIFTY</mat-option>
-          </mat-select>
-        </mat-form-field>
-      </div>
-
-      <!-- Historical Date -->
-      <div class="config-item">
-        <label class="item-label">Trading Date (PostgreSQL DB)</label>
-        @if (availableDates().length > 0) {
-          <mat-form-field appearance="outline" density="compact" class="compact-field">
-            <mat-select [value]="selectedDate()" (selectionChange)="onDateChange($event.value)" [disabled]="isPlaying()">
-              @for (d of availableDates(); track d) {
-                <mat-option [value]="d">
-                  {{ d === todayISODate ? d + ' (Today)' : d + ' (Database)' }}
-                </mat-option>
-              }
-            </mat-select>
-          </mat-form-field>
-        } @else {
-          <mat-form-field appearance="outline" density="compact" class="compact-field">
-            <input
-              matInput
-              type="date"
-              [ngModel]="selectedDate()"
-              (ngModelChange)="onDateChange($event)"
-              [disabled]="isPlaying()"
-            />
-          </mat-form-field>
-        }
-      </div>
-
-      <!-- Expiry Date Filter -->
-      <div class="config-item">
-        <label class="item-label">Expiry</label>
-        <mat-form-field appearance="outline" density="compact" class="compact-field">
-          <mat-select [value]="selectedExpiry()" (selectionChange)="onExpiryChange($event.value)" [disabled]="isPlaying()">
-            <mat-option [value]="''">Nearest / All</mat-option>
-            @for (exp of availableExpiries(); track exp) {
-              <mat-option [value]="exp">{{ exp }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
-      </div>
-
-      <!-- Time Frame Selection -->
-      <div class="config-item tf-item">
-        <label class="item-label">Time Frame</label>
-        <div class="tf-button-group">
-          <button
-            type="button"
-            class="tf-btn"
-            [class.active]="timeFrame() === 1"
-            (click)="changeTimeFrame(1)"
-            [disabled]="isPlaying()"
-          >
-            1 Min
-          </button>
-          <button
-            type="button"
-            class="tf-btn"
-            [class.active]="timeFrame() === 3"
-            (click)="changeTimeFrame(3)"
-            [disabled]="isPlaying()"
-          >
-            3 Min
-          </button>
-          <button
-            type="button"
-            class="tf-btn"
-            [class.active]="timeFrame() === 5"
-            (click)="changeTimeFrame(5)"
-            [disabled]="isPlaying()"
-          >
-            5 Min
-          </button>
-        </div>
-      </div>
-
-      <!-- Start Time & End Time -->
-      <div class="config-item time-range-group">
-        <div class="time-sub">
-          <label class="item-label">Start Time</label>
-          <mat-form-field appearance="outline" density="compact" class="compact-field time-field">
-            <input
-              matInput
-              type="time"
-              [ngModel]="startTime()"
-              (ngModelChange)="startTime.set($event)"
-              [disabled]="isPlaying()"
-            />
-          </mat-form-field>
-        </div>
-        <span class="range-sep">&rarr;</span>
-        <div class="time-sub">
-          <label class="item-label">End Time</label>
-          <mat-form-field appearance="outline" density="compact" class="compact-field time-field">
-            <input
-              matInput
-              type="time"
-              [ngModel]="endTime()"
-              (ngModelChange)="endTime.set($event)"
-              [disabled]="isPlaying()"
-            />
-          </mat-form-field>
-        </div>
-      </div>
-
-      <!-- Strike Window -->
-      <div class="config-item">
-        <label class="item-label">Strike Window</label>
-        <mat-form-field appearance="outline" density="compact" class="compact-field">
-          <mat-select [value]="strikeRange()" (selectionChange)="strikeRange.set($event.value)">
-            <mat-option [value]="5">&plusmn;5 Strikes</mat-option>
-            <mat-option [value]="10">&plusmn;10 Strikes</mat-option>
-            <mat-option [value]="15">&plusmn;15 Strikes</mat-option>
-            <mat-option [value]="25">&plusmn;25 Strikes</mat-option>
-          </mat-select>
-        </mat-form-field>
-      </div>
-
-      <!-- Load Session Button -->
-      <div class="config-item load-btn-item">
-        <button
-          mat-flat-button
-          color="primary"
-          class="load-session-btn"
-          (click)="loadReplayData()"
-          [disabled]="isLoading() || isPlaying() || isNonTradingDay()"
-        >
-          <mat-icon *ngIf="!isLoading()">cloud_download</mat-icon>
-          <mat-progress-spinner *ngIf="isLoading()" mode="indeterminate" diameter="18"></mat-progress-spinner>
-          <span>Load Session</span>
-        </button>
-      </div>
-    </div>
-  </mat-card>
-
-  <!-- Playback Controller & Timeline Section -->
-  <mat-card class="playback-hub-card">
+  <!-- 3. BOTTOM SECTION: Compact Playback Controls Panel (Matches Screenshot 1) -->
+  <div class="playback-hub-card">
     <div class="playback-upper-row">
-      <!-- Main Transport Controls -->
+      <!-- Transport Controls: Restart, Prev, Play/Pause FAB, Next -->
       <div class="transport-controls">
-        <!-- Restart Button -->
         <button
-          mat-icon-button
+          type="button"
           class="ctrl-btn"
           (click)="restart()"
           [disabled]="totalFrames() === 0"
@@ -257,9 +244,8 @@
           <mat-icon>first_page</mat-icon>
         </button>
 
-        <!-- Previous Minute -->
         <button
-          mat-icon-button
+          type="button"
           class="ctrl-btn"
           (click)="stepBackward()"
           [disabled]="totalFrames() === 0 || currentIndex() <= 0"
@@ -268,9 +254,8 @@
           <mat-icon>skip_previous</mat-icon>
         </button>
 
-        <!-- Play / Pause Main Button -->
         <button
-          mat-fab
+          type="button"
           class="play-fab-btn"
           [class.is-active-play]="isPlaying()"
           [class.is-live-pulse]="isLiveSync()"
@@ -281,9 +266,8 @@
           <mat-icon class="play-icon">{{ isLiveSync() ? 'pause' : (isPlaying() ? 'pause' : 'play_arrow') }}</mat-icon>
         </button>
 
-        <!-- Next Minute -->
         <button
-          mat-icon-button
+          type="button"
           class="ctrl-btn"
           (click)="stepForward()"
           [disabled]="totalFrames() === 0 || currentIndex() >= maxAllowedSliderIndex()"
@@ -293,7 +277,7 @@
         </button>
       </div>
 
-      <!-- Historical Time & Progress Indicator -->
+      <!-- Center: Synchronized Historical Time Box -->
       <div class="current-time-indicator">
         <div class="live-clock-badge" [class.synced-active]="isLiveSync()">
           <span class="clock-label">
@@ -302,84 +286,89 @@
           <span class="clock-display">{{ currentTimestamp() }}</span>
         </div>
 
-        <div class="sync-offset-badge" [class.is-synced]="isLiveSync()">
-          <span class="sync-offset-label">{{ isLiveSync() ? 'LIVE SYNC' : 'MANUAL' }}:</span>
-          <span class="sync-offset-value">{{ syncStatusDetail() }}</span>
-          @if (!isLiveSync()) {
-            <button type="button" class="quick-re-sync-btn" (click)="resumeLiveSync()" matTooltip="Snap back to current real-world market time">
-              <mat-icon>sync</mat-icon>
-              <span>Sync to Now</span>
-            </button>
-          }
-        </div>
-
-        <div class="frame-counter">
-          <span>Interval {{ currentIndex() + 1 }} / {{ maxAllowedSliderIndex() + 1 }} (Active Market Range)</span>
-          <span class="interval-tag">({{ timeFrame() }}m step)</span>
+        <div class="sync-offset-line">
+          <div class="sync-offset-badge" [class.is-synced]="isLiveSync()">
+            <span class="pulsing-record-dot" [class.live-pulse]="isLiveSync() || isPlaying()"></span>
+            <span class="sync-offset-label">{{ isLiveSync() ? 'LIVE SYNC' : 'MANUAL' }}:</span>
+            <span class="sync-offset-value">{{ syncStatusDetail() }}</span>
+            @if (!isLiveSync()) {
+              <button type="button" class="quick-re-sync-btn" (click)="resumeLiveSync()" matTooltip="Snap back to current real-world market time">
+                <mat-icon>sync</mat-icon>
+                <span>Sync to Now</span>
+              </button>
+            }
+          </div>
+          <div class="frame-counter">
+            <span>Interval {{ currentIndex() + 1 }} / {{ maxAllowedSliderIndex() + 1 }} (Active Market Range) ({{ timeFrame() }}m step)</span>
+          </div>
         </div>
       </div>
 
-      <!-- Playback Speed, Mode Toggle & Auto-Refresh -->
+      <!-- Right: Modes, Auto-Refresh & Speed in 2 compact rows -->
       <div class="speed-controls">
-        <div class="mode-toggle-group">
-          <button
-            type="button"
-            class="mode-btn"
-            [class.active-mode]="isLiveSync()"
-            (click)="resumeLiveSync()"
-            matTooltip="Enable continuous real-time market synchronization"
-          >
-            <span class="dot-indicator green-dot" *ngIf="isLiveSync()"></span>
-            Live Sync
-          </button>
-          <button
-            type="button"
-            class="mode-btn"
-            [class.active-mode]="!isLiveSync()"
-            (click)="replayController.pause(true)"
-            matTooltip="Enter manual timeline exploration mode"
-          >
-            Manual
-          </button>
-        </div>
-
-        <!-- Auto-Refresh Engine Controls -->
-        <div class="auto-refresh-box">
-          <button
-            type="button"
-            class="auto-refresh-toggle-btn"
-            [class.active-auto-refresh]="autoRefreshEnabled()"
-            (click)="toggleAutoRefresh()"
-            [matTooltip]="'Toggle automatic real-time data refreshing (Currently ' + (autoRefreshEnabled() ? 'ON' : 'OFF') + ')'"
-          >
-            <span class="auto-refresh-dot" [class.live-pulse]="autoRefreshEnabled()"></span>
-            <span>Auto Refresh: {{ autoRefreshEnabled() ? 'ON' : 'OFF' }}</span>
-          </button>
-
-          <div class="interval-selector" *ngIf="autoRefreshEnabled()">
+        <div class="controls-top-row">
+          <!-- Live Sync vs Manual Mode Pill Toggle -->
+          <div class="mode-toggle-group">
             <button
-              *ngFor="let sec of [10, 15, 30, 60]"
               type="button"
-              class="interval-btn"
-              [class.active-interval]="autoRefreshInterval() === sec"
-              (click)="changeAutoRefreshInterval(sec)"
-              [matTooltip]="'Refresh interval ' + sec + ' seconds'"
+              class="mode-btn"
+              [class.active-mode]="isLiveSync()"
+              (click)="resumeLiveSync()"
+              matTooltip="Enable continuous real-time market synchronization"
             >
-              {{ sec }}s
+              <span class="dot-indicator green-dot" *ngIf="isLiveSync()"></span>
+              Live Sync
+            </button>
+            <button
+              type="button"
+              class="mode-btn"
+              [class.active-mode]="!isLiveSync()"
+              (click)="replayController.pause(true)"
+              matTooltip="Enter manual timeline exploration mode"
+            >
+              Manual
             </button>
           </div>
 
-          <button
-            type="button"
-            class="manual-refresh-icon-btn"
-            (click)="refreshHistoricalData(false)"
-            [disabled]="isLoading() || isBackgroundRefreshing()"
-            matTooltip="Refresh latest market data now"
-          >
-            <mat-icon [class.spin-anim]="isLoading() || isBackgroundRefreshing()">refresh</mat-icon>
-          </button>
+          <!-- Auto-Refresh Controls -->
+          <div class="auto-refresh-box">
+            <button
+              type="button"
+              class="auto-refresh-toggle-btn"
+              [class.active-auto-refresh]="autoRefreshEnabled()"
+              (click)="toggleAutoRefresh()"
+              [matTooltip]="'Toggle automatic real-time data refreshing (Currently ' + (autoRefreshEnabled() ? 'ON' : 'OFF') + ')'"
+            >
+              <span class="auto-refresh-dot" [class.live-pulse]="autoRefreshEnabled()"></span>
+              <span>Auto Refresh: {{ autoRefreshEnabled() ? 'ON' : 'OFF' }}</span>
+            </button>
+
+            <div class="interval-selector" *ngIf="autoRefreshEnabled()">
+              <button
+                *ngFor="let sec of [10, 15, 30, 60]"
+                type="button"
+                class="interval-btn"
+                [class.active-interval]="autoRefreshInterval() === sec"
+                (click)="changeAutoRefreshInterval(sec)"
+                [matTooltip]="'Refresh interval ' + sec + ' seconds'"
+              >
+                {{ sec }}s
+              </button>
+            </div>
+
+            <button
+              type="button"
+              class="manual-refresh-icon-btn"
+              (click)="refreshHistoricalData(false)"
+              [disabled]="isLoading() || isBackgroundRefreshing()"
+              matTooltip="Refresh latest market data now"
+            >
+              <mat-icon [class.spin-anim]="isLoading() || isBackgroundRefreshing()">refresh</mat-icon>
+            </button>
+          </div>
         </div>
 
+        <!-- Playback Speed -->
         <div class="speed-box">
           <span class="speed-label">Speed:</span>
           <div class="speed-button-group">
@@ -434,104 +423,10 @@
         <span class="timeline-end">Current Live Ceiling: {{ liveClock().timeStr }}</span>
       </div>
     </div>
-  </mat-card>
-
-  <!-- Real-time Historical Metrics Summary Cards -->
-  <div class="metrics-grid">
-    <!-- Spot Price -->
-    <div class="metric-card spot-card">
-      <div class="metric-header">
-        <mat-icon class="metric-icon">trending_up</mat-icon>
-        <span class="metric-title">{{ symbol() }} Spot Price</span>
-      </div>
-      <div class="metric-value-box">
-        <div class="metric-val-row">
-          <span class="primary-val">{{ formatNumber(currentSpot()) }}</span>
-          <span
-            *ngIf="spotPctChange() as sp"
-            class="metric-pct-badge"
-            [class.pct-up]="sp.isIncrease"
-            [class.pct-down]="sp.isDecrease"
-            [matTooltip]="'Spot change vs ' + (previousTimestamp() || 'prev') + ': ' + sp.formatted"
-          >
-            {{ sp.formatted }}
-          </span>
-        </div>
-        <span class="secondary-info">At Replay {{ currentTimestamp() }}</span>
-      </div>
-    </div>
-
-    <!-- ATM Strike -->
-    <div
-      class="metric-card atm-card clickable-atm-card"
-      (click)="scrollToATMStrike()"
-      matTooltip="Click to scroll directly to ATM Strike in the table"
-    >
-      <div class="metric-header">
-        <mat-icon class="metric-icon">gps_fixed</mat-icon>
-        <span class="metric-title">Historical ATM Strike</span>
-      </div>
-      <div class="metric-value-box">
-        <span class="primary-val atm-val">{{ formatNumber(currentATM()) }}</span>
-        <span class="secondary-info">Strike Step: {{ symbol() === 'BANKNIFTY' ? '100' : '50' }}</span>
-      </div>
-    </div>
-
-    <!-- Historical PCR -->
-    <div class="metric-card pcr-card">
-      <div class="metric-header">
-        <mat-icon class="metric-icon">donut_large</mat-icon>
-        <span class="metric-title">Historical PCR</span>
-      </div>
-      <div class="metric-value-box">
-        <div class="metric-val-row">
-          <span class="primary-val" [class.pcr-high]="currentPCR() >= 1" [class.pcr-low]="currentPCR() < 1">
-            {{ formatDecimal(currentPCR(), 2) }}
-          </span>
-          <span
-            *ngIf="pcrPctChange() as pp"
-            class="metric-pct-badge"
-            [class.pct-up]="pp.isIncrease"
-            [class.pct-down]="pp.isDecrease"
-            [matTooltip]="'PCR change vs ' + (previousTimestamp() || 'prev') + ': ' + pp.formatted"
-          >
-            {{ pp.formatted }}
-          </span>
-        </div>
-        <span class="sentiment-badge" [ngClass]="getPCRSentiment(currentPCR()).class">
-          {{ getPCRSentiment(currentPCR()).label }}
-        </span>
-      </div>
-    </div>
-
-    <!-- Historical Average PCR (ATM ±3 Strikes) -->
-    <div class="metric-card avg-pcr-card">
-      <div class="metric-header">
-        <mat-icon class="metric-icon">stacked_line_chart</mat-icon>
-        <span class="metric-title">Average PCR (ATM &plusmn;3)</span>
-      </div>
-      <div class="metric-value-box">
-        <div class="metric-val-row">
-          <span class="primary-val" [class.pcr-high]="currentAveragePCR() >= 1" [class.pcr-low]="currentAveragePCR() < 1">
-            {{ formatDecimal(currentAveragePCR(), 2) }}
-          </span>
-          <span
-            *ngIf="avgPcrPctChange() as ap"
-            class="metric-pct-badge"
-            [class.pct-up]="ap.isIncrease"
-            [class.pct-down]="ap.isDecrease"
-            [matTooltip]="'Avg PCR change vs ' + (previousTimestamp() || 'prev') + ': ' + ap.formatted"
-          >
-            {{ ap.formatted }}
-          </span>
-        </div>
-        <span class="secondary-info">Put OI: {{ formatNumber(totalPutOI()) }} / Call OI: {{ formatNumber(totalCallOI()) }}</span>
-      </div>
-    </div>
   </div>
 
   <!-- Historical Option Chain Table -->
-  <mat-card class="chain-table-card">
+  <mat-card class="chain-table-card" *ngIf="!isTableCollapsed()">
     <div class="table-header-bar">
       <div class="table-title-group">
         <mat-icon class="table-icon">table_view</mat-icon>
