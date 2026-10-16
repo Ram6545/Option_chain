@@ -82,14 +82,14 @@ export class OptionChainComponent implements OnInit, OnDestroy {
 
   // Column display controls (Option Greeks, Bid/Ask Quote Columns & PCR Analysis)
   showBidAsk = signal<boolean>(false);
-  showGreeks = signal<boolean>(true);
-  showCallsGreeks = signal<boolean>(true);
-  showPutsGreeks = signal<boolean>(true);
+  showGreeks = signal<boolean>(false);
+  showCallsGreeks = signal<boolean>(false);
+  showPutsGreeks = signal<boolean>(false);
   showDelta = signal<boolean>(true);
   showTheta = signal<boolean>(true);
   showGamma = signal<boolean>(true);
   showVega = signal<boolean>(true);
-  showPCR = signal<boolean>(true);
+  showPCR = signal<boolean>(false);
 
   // Table row density control ('compact' shows maximum rows with reduced padding, 'normal', 'comfortable')
   density = signal<'compact' | 'normal' | 'comfortable'>('compact');
@@ -1168,6 +1168,8 @@ export class OptionChainComponent implements OnInit, OnDestroy {
       }
       this.snackBar.open('Option Greeks Shown (Both Sides)', 'Close', { duration: 1500 });
     } else {
+      this.showCallsGreeks.set(false);
+      this.showPutsGreeks.set(false);
       this.snackBar.open('Option Greeks Hidden', 'Close', { duration: 1500 });
     }
   }
@@ -1177,6 +1179,8 @@ export class OptionChainComponent implements OnInit, OnDestroy {
     const bothOn = this.showGreeks() && this.showCallsGreeks() && this.showPutsGreeks();
     if (bothOn) {
       this.showGreeks.set(false);
+      this.showCallsGreeks.set(false);
+      this.showPutsGreeks.set(false);
       this.snackBar.open('Greeks Hidden on Both Sides', 'Close', { duration: 1500 });
     } else {
       this.showGreeks.set(true);
@@ -1272,6 +1276,8 @@ export class OptionChainComponent implements OnInit, OnDestroy {
   setGreekPreset(preset: 'all' | 'delta_theta' | 'delta_only' | 'none'): void {
     if (preset === 'none') {
       this.showGreeks.set(false);
+      this.showCallsGreeks.set(false);
+      this.showPutsGreeks.set(false);
       this.snackBar.open('All Greeks Hidden', 'Close', { duration: 1500 });
       return;
     }

@@ -246,9 +246,13 @@
             <mat-icon>{{ showGreeks() ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
             <span>Show Option Greeks (Delta, Theta, Gamma, Vega)</span>
           </button>
+          <button mat-menu-item (click)="togglePCR()">
+            <mat-icon>{{ showPCR() ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
+            <span>Show PCR Columns (OI &amp; Chg OI)</span>
+          </button>
           <button mat-menu-item (click)="toggleBidAsk()">
             <mat-icon>{{ showBidAsk() ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
-            <span>Show Bid & Ask Quote Columns</span>
+            <span>Show Bid &amp; Ask Quote Columns</span>
           </button>
           <button mat-menu-item (click)="toggleDensity()">
             <mat-icon>table_rows</mat-icon>
