@@ -1,87 +1,39 @@
 <div class="strike-pcr-container">
-  <!-- Header & Controls -->
+  <!-- Ultra-Compact Header & Controls Strip -->
   <header class="pcr-header">
-    <div class="title-area">
+    <!-- Row 1: Title, Live Indicator, Strikes Summary, Actions -->
+    <div class="header-top-row">
       <div class="title-with-badge">
-        <h2>Options Chain PCR Analysis</h2>
+        <h2 class="header-title">Options Chain PCR Analysis</h2>
         <span class="live-indicator" [class.live-active]="isLiveMode()">
           <span class="pulse-dot"></span>
           {{ isLiveMode() ? 'Live NSE' : 'Snapshot Mode' }}
         </span>
-      </div>
-      <p class="subtitle">
-        Analyzing {{ strikeRange() }} strikes below + Selected Strike ({{ selectedStrike() || 'ATM' }}) + {{ strikeRange() }} strikes above (Total {{ strikes().length }} strikes)
-      </p>
-    </div>
-
-    <!-- Controls Panel -->
-    <div class="controls-panel">
-      <!-- Symbol Selector -->
-      <mat-form-field appearance="outline" class="control-field symbol-field">
-        <mat-label>Index</mat-label>
-        <mat-select [value]="selectedSymbol()" (valueChange)="onSymbolChange($event)">
-          <mat-option *ngFor="let idx of indices()" [value]="idx.symbol">
-            {{ idx.display_name || idx.name }}
-          </mat-option>
-          <mat-option *ngIf="!indices() || indices().length === 0" value="NIFTY">NIFTY 50</mat-option>
-          <mat-option *ngIf="!indices() || indices().length === 0" value="BANKNIFTY">BANK NIFTY</mat-option>
-        </mat-select>
-      </mat-form-field>
-
-      <!-- Strike Selector -->
-      <mat-form-field appearance="outline" class="control-field strike-field">
-        <mat-label>Selected Strike</mat-label>
-        <mat-select [value]="selectedStrike()" (valueChange)="onStrikeChange($event)">
-          <mat-option *ngFor="let s of availableStrikes()" [value]="s">
-            {{ s }}
-            <span *ngIf="s === atmStrike()" class="option-atm-tag">(ATM)</span>
-          </mat-option>
-        </mat-select>
-      </mat-form-field>
-
-      <!-- Strike Range Selector (Configurable 3, 5, 7, 10 strikes) -->
-      <div class="range-selector-wrapper">
-        <span class="range-label">Strikes Each Side:</span>
-        <mat-button-toggle-group
-          [value]="strikeRange()"
-          (change)="onRangeChange($event.value)"
-          class="range-toggle-group"
-        >
-          <mat-button-toggle *ngFor="let opt of rangeOptions" [value]="opt.value" [matTooltip]="opt.label">
-            ±{{ opt.value }}
-          </mat-button-toggle>
-        </mat-button-toggle-group>
+        <span class="range-info-pill">
+          Window: &plusmn;{{ strikeRange() }} Strikes (Total {{ strikes().length }})
+        </span>
       </div>
 
-      <!-- Expiry Selector -->
-      <mat-form-field *ngIf="expiries().length > 0" appearance="outline" class="control-field expiry-field">
-        <mat-label>Expiry</mat-label>
-        <mat-select [value]="selectedExpiry()" (valueChange)="onExpiryChange($event)">
-          <mat-option *ngFor="let exp of expiries()" [value]="exp">{{ exp }}</mat-option>
-        </mat-select>
-      </mat-form-field>
-
-      <!-- Action Buttons -->
       <div class="action-buttons">
         <button
-          mat-stroked-button
-          color="accent"
+          type="button"
+          class="btn-action live-toggle-btn"
           (click)="toggleLiveMode()"
           [class.active-toggle]="isLiveMode()"
           matTooltip="Fetch real-time data directly from NSE"
         >
-          <mat-icon>rss_feed</mat-icon>
+          <mat-icon class="btn-icon">rss_feed</mat-icon>
           <span>{{ isLiveMode() ? 'Live ON' : 'Live OFF' }}</span>
         </button>
 
         <button
-          mat-flat-button
-          color="primary"
+          type="button"
+          class="btn-action refresh-btn"
           (click)="fetchPCRAnalysis()"
           [disabled]="isLoading()"
           matTooltip="Refresh Data"
         >
-          <mat-icon [class.spinning]="isLoading()">refresh</mat-icon>
+          <mat-icon class="btn-icon" [class.spinning]="isLoading()">refresh</mat-icon>
           <span>Refresh</span>
         </button>
 
@@ -90,37 +42,92 @@
           (change)="toggleAutoRefresh()"
           color="primary"
           matTooltip="Auto-refresh every 30 seconds"
+          class="compact-slide-toggle"
         >
           Auto (30s)
         </mat-slide-toggle>
+
+        <div class="timestamp-tag" *ngIf="pcrData()?.timestamp">
+          <mat-icon class="time-icon">schedule</mat-icon>
+          <span>{{ pcrData()?.timestamp | date:'mediumTime' }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 2: Sleek Inline Controls & Integrated Quick Jump -->
+    <div class="controls-panel">
+      <!-- Symbol Selector -->
+      <div class="ctrl-item">
+        <label class="ctrl-label">INDEX</label>
+        <select class="ctrl-select" [ngModel]="selectedSymbol()" (ngModelChange)="onSymbolChange($event)">
+          <option *ngFor="let idx of indices()" [value]="idx.symbol">
+            {{ idx.display_name || idx.name }}
+          </option>
+          <option *ngIf="!indices() || indices().length === 0" value="NIFTY">NIFTY 50</option>
+          <option *ngIf="!indices() || indices().length === 0" value="BANKNIFTY">BANK NIFTY</option>
+        </select>
+      </div>
+
+      <!-- Strike Selector -->
+      <div class="ctrl-item">
+        <label class="ctrl-label">STRIKE</label>
+        <select
+          class="ctrl-select strike-select"
+          [ngModel]="selectedStrike() || atmStrike()"
+          (ngModelChange)="onStrikeChange($event)"
+        >
+          <option *ngFor="let s of availableStrikes()" [ngValue]="s">
+            {{ s }}{{ isAtmStrike(s) ? ' (ATM)' : '' }}
+          </option>
+        </select>
+      </div>
+
+      <!-- Strikes Range (Window) -->
+      <div class="ctrl-item">
+        <label class="ctrl-label">WINDOW</label>
+        <div class="toggle-pill-group">
+          <button
+            type="button"
+            *ngFor="let opt of rangeOptions"
+            class="toggle-pill"
+            [class.active]="strikeRange() === opt.value"
+            (click)="onRangeChange(opt.value)"
+            [matTooltip]="opt.label"
+          >
+            &plusmn;{{ opt.value }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Expiry Selector -->
+      <div class="ctrl-item" *ngIf="expiries().length > 0">
+        <label class="ctrl-label">EXPIRY</label>
+        <select class="ctrl-select expiry-select" [ngModel]="selectedExpiry()" (ngModelChange)="onExpiryChange($event)">
+          <option *ngFor="let exp of expiries()" [value]="exp">{{ exp }}</option>
+        </select>
+      </div>
+
+      <!-- Quick Jump Buttons (Integrated into controls row) -->
+      <div class="ctrl-item jump-item">
+        <label class="ctrl-label">JUMP</label>
+        <div class="jump-btn-group">
+          <button type="button" class="btn-jump" (click)="shiftStrikeDown()" matTooltip="Select 1 strike lower">
+            <mat-icon>arrow_downward</mat-icon> Lower
+          </button>
+          <button type="button" class="btn-jump atm-jump" (click)="selectATMStrike()" matTooltip="Jump to At-The-Money strike">
+            <mat-icon>my_location</mat-icon> ATM ({{ atmStrike() }})
+          </button>
+          <button type="button" class="btn-jump" (click)="shiftStrikeUp()" matTooltip="Select 1 strike higher">
+            <mat-icon>arrow_upward</mat-icon> Higher
+          </button>
+        </div>
       </div>
     </div>
   </header>
 
-  <!-- Quick Navigation Bar for Strikes -->
-  <div class="strike-quick-nav">
-    <div class="quick-nav-left">
-      <span class="nav-label">Quick Jump:</span>
-      <button mat-button class="nav-btn" (click)="shiftStrikeDown()" matTooltip="Select 1 strike lower">
-        <mat-icon>arrow_downward</mat-icon> Shift Lower
-      </button>
-      <button mat-button class="nav-btn atm-btn" (click)="selectATMStrike()" matTooltip="Jump to At-The-Money strike">
-        <mat-icon>my_location</mat-icon> Reset to ATM ({{ atmStrike() }})
-      </button>
-      <button mat-button class="nav-btn" (click)="shiftStrikeUp()" matTooltip="Select 1 strike higher">
-        <mat-icon>arrow_upward</mat-icon> Shift Higher
-      </button>
-    </div>
-
-    <div class="timestamp-tag" *ngIf="pcrData()?.timestamp">
-      <mat-icon class="time-icon">schedule</mat-icon>
-      <span>Last Updated: {{ pcrData()?.timestamp | date:'mediumTime' }}</span>
-    </div>
-  </div>
-
   <!-- Loading Spinner -->
   <div *ngIf="isLoading() && !pcrData()" class="loading-state">
-    <mat-spinner diameter="48"></mat-spinner>
+    <mat-spinner diameter="40"></mat-spinner>
     <p>Calculating Options Chain PCR Analysis...</p>
   </div>
 
@@ -136,71 +143,71 @@
 
   <!-- Main Content When Data Available -->
   <div *ngIf="pcrData()" class="pcr-content">
-    <!-- Top Metric Summary Cards -->
+    <!-- Top Metric Summary Cards (Compact 38px Row) -->
     <div class="metrics-grid">
       <!-- Card 1: Market Value Considered -->
-      <mat-card class="metric-card spot-card">
-        <div class="card-header-icon">
-          <mat-icon class="icon-spot">trending_up</mat-icon>
-          <span class="metric-title">Market Value Considered</span>
+      <div class="metric-card spot-card">
+        <div class="metric-header-row">
+          <div class="metric-title-wrap">
+            <mat-icon class="icon-spot">trending_up</mat-icon>
+            <span class="metric-title">Market Value</span>
+          </div>
+          <span class="metric-badge spot-badge">Spot Anchor</span>
         </div>
         <div class="metric-main-value">
           ₹{{ underlyingPrice() | number:'1.2-2' }}
         </div>
-        <div class="metric-footer">
-          <span class="atm-badge">Spot Anchor for ATM Strike</span>
-        </div>
-      </mat-card>
+      </div>
 
       <!-- Card 2: Initial Strike Price (ATM) -->
-      <mat-card class="metric-card target-card">
-        <div class="card-header-icon">
-          <mat-icon class="icon-target">gps_fixed</mat-icon>
-          <span class="metric-title">Initial Strike Price (ATM)</span>
+      <div class="metric-card target-card">
+        <div class="metric-header-row">
+          <div class="metric-title-wrap">
+            <mat-icon class="icon-target">gps_fixed</mat-icon>
+            <span class="metric-title">Initial ATM Strike</span>
+          </div>
+          <span class="metric-badge atm-badge">&plusmn;{{ strikeRange() }} Strikes</span>
         </div>
         <div class="metric-main-value highlight-text">
           {{ atmStrike() }}
           <span class="target-atm-pill" *ngIf="atmStrike()">ATM</span>
         </div>
-        <div class="metric-footer">
-          <span>Window: &plusmn;{{ strikeRange() }} strikes (Selected: {{ selectedStrike() }})</span>
-        </div>
-      </mat-card>
+      </div>
 
       <!-- Card 3: Aggregate PCR (OI) -->
-      <mat-card class="metric-card pcr-card">
-        <div class="card-header-icon">
-          <mat-icon class="icon-pcr">donut_large</mat-icon>
-          <span class="metric-title">Aggregate PCR (OI)</span>
-        </div>
-        <div class="metric-main-value" [ngClass]="getPCRClass(aggregate()?.aggregatePcrOI)">
-          {{ formatPCR(aggregate()?.aggregatePcrOI) }}
-        </div>
-        <div class="metric-footer">
+      <div class="metric-card pcr-card">
+        <div class="metric-header-row">
+          <div class="metric-title-wrap">
+            <mat-icon class="icon-pcr">donut_large</mat-icon>
+            <span class="metric-title">Aggregate PCR (OI)</span>
+          </div>
           <span class="sentiment-pill" [ngClass]="getSentimentBadgeClass(aggregate()?.sentiment)">
             {{ aggregate()?.sentiment?.replace('_', ' ') | uppercase }}
           </span>
         </div>
-      </mat-card>
+        <div class="metric-main-value" [ngClass]="getPCRClass(aggregate()?.aggregatePcrOI)">
+          {{ formatPCR(aggregate()?.aggregatePcrOI) }}
+        </div>
+      </div>
 
       <!-- Card 4: Aggregate PCR (Change in OI) -->
-      <mat-card class="metric-card chg-card">
-        <div class="card-header-icon">
-          <mat-icon class="icon-chg">swap_vert</mat-icon>
-          <span class="metric-title">Aggregate PCR (Chg OI)</span>
+      <div class="metric-card chg-card">
+        <div class="metric-header-row">
+          <div class="metric-title-wrap">
+            <mat-icon class="icon-chg">swap_vert</mat-icon>
+            <span class="metric-title">Aggregate PCR (Chg OI)</span>
+          </div>
+          <span class="sub-text-pill">
+            {{ (aggregate()?.totalPutChangeOI || 0) >= (aggregate()?.totalCallChangeOI || 0) ? 'Put Accum.' : 'Call Writing' }}
+          </span>
         </div>
         <div class="metric-main-value" [ngClass]="getChangeClass(aggregate()?.aggregatePcrChangeOI)">
           {{ formatPCR(aggregate()?.aggregatePcrChangeOI) }}
         </div>
-        <div class="metric-footer">
-          <span class="sub-text">
-            {{ (aggregate()?.totalPutChangeOI || 0) >= (aggregate()?.totalCallChangeOI || 0) ? 'Put Accumulation' : 'Call Writing' }}
-          </span>
-        </div>
-      </mat-card>
+      </div>
     </div>
 
-    <!-- Sentiment Interpretation Banner -->
+    <!-- Sentiment Interpretation Banner (Ultra-Compact 22px) -->
     <div class="sentiment-bar" [ngClass]="getSentimentBadgeClass(aggregate()?.sentiment)">
       <mat-icon class="sentiment-icon">
         {{ aggregate()?.sentiment?.includes('bullish') ? 'trending_up' : (aggregate()?.sentiment?.includes('bearish') ? 'trending_down' : 'compare_arrows') }}

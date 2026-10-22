@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import { OptionChainComponent } from './components/option-chain/option-chain.component';
 import { OIAnalysisComponent } from './components/oi-analysis/oi-analysis.component';
 import { StrikePcrComponent } from './components/strike-pcr/strike-pcr.component';
+import { PCRTrackerComponent } from './components/pcr-tracker/pcr-tracker.component';
 import { HistoricalReplayComponent } from './components/historical-replay/historical-replay.component';
 
 export const routes: Routes = [
@@ -10,6 +11,8 @@ export const routes: Routes = [
   { path: 'oi-analysis', component: OIAnalysisComponent },
   { path: 'strike-pcr', component: StrikePcrComponent },
   { path: 'pcr-analysis', redirectTo: '/strike-pcr', pathMatch: 'full' },
+  { path: 'pcr-tracker', component: PCRTrackerComponent },
+  { path: 'pcr', redirectTo: '/pcr-tracker', pathMatch: 'full' },
   { path: 'historical-replay', component: HistoricalReplayComponent },
   { path: '**', redirectTo: '/option-chain' },
 ];

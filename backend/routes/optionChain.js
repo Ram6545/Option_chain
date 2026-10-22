@@ -38,6 +38,13 @@ router.get('/option-chain/:symbol/snapshot/:snapshotId', controller.getSnapshotD
 // GET /api/option-chain/:symbol/analysis - Get OI analysis
 router.get('/option-chain/:symbol/analysis', controller.getOIAnalysis);
 
+// GET /api/option-chain/:symbol/pcr-tracking - PCR Tracking Dashboard API
+// Query params: ?date=2026-10-22&expiry=2026-10-29&timeFrame=1
+router.get('/option-chain/:symbol/pcr-tracking', controller.getPCRTrackingData);
+router.get('/option-chain/pcr-tracking', controller.getPCRTrackingData);
+router.get('/pcr-tracking/:symbol', controller.getPCRTrackingData);
+router.get('/pcr-tracking', controller.getPCRTrackingData);
+
 // GET /api/option-chain/:symbol/pcr-analysis - Get Strike-by-Strike & Aggregate PCR Analysis
 // Query params: ?selectedStrike=24200&strikeRange=3&expiry=18-Aug-2026&live=false
 router.get('/option-chain/:symbol/pcr-analysis', controller.getStrikePCRAnalysis);

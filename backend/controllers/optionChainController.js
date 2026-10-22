@@ -867,6 +867,36 @@ const getHistoricalReplayData = async (req, res, next) => {
 };
 
 /**
+ * Get PCR Tracking Dashboard Data.
+ * GET /api/option-chain/:symbol/pcr-tracking
+ * or GET /api/pcr-tracking/:symbol
+ * Query params:
+ *   - date: e.g. 2026-10-22
+ *   - expiry: e.g. 2026-10-29
+ *   - timeFrame: e.g. 1, 3, 5, 15, 30, 60
+ *   - startTime: e.g. 09:15
+ *   - endTime: e.g. 15:30
+ */
+const getPCRTrackingData = async (req, res, next) => {
+  try {
+    const symbol = req.params.symbol || req.query.symbol || 'NIFTY';
+    const { date, expiry, startTime, endTime, timeFrame } = req.query;
+
+    const result = await historicalReplayService.getPCRTracking(symbol, {
+      date: date || req.params.date,
+      expiry,
+      startTime,
+      endTime,
+      timeFrame,
+    });
+
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Get distinct available historical trading dates.
  * GET /api/option-chain/history/dates
  */
@@ -957,6 +987,7 @@ module.exports = {
   getPreMarketPCR,
   savePreMarketOpen,
   getHistoricalReplayData,
+  getPCRTrackingData,
   getHistoricalDates,
   getHistoricalExpiries,
   getActiveExpiryCycle,

@@ -76,9 +76,10 @@ export interface Index {
   symbol: string;
   display_name: string;
   lot_size: number;
+  strike_step?: number;
   is_active: boolean;
-  created_at: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 /**
@@ -441,5 +442,105 @@ export interface HistoricalExpiriesResponse {
   count: number;
   data: string[];
 }
+
+/**
+ * PCR Tracker Interval Item (for time-series charts & historical data table)
+ */
+export interface PCRTrackerInterval {
+  timestamp: string; // e.g. "09:41"
+  fullTimestamp?: string;
+  spotPrice: number;
+  spotChange: number;
+  atmStrike: number;
+  putOI: number;
+  callOI: number;
+  putOIChange: number;
+  callOIChange: number;
+  pcr: number | null;
+  previousPCR: number | null;
+  pcrChange: number;
+  pcrChangePercent: number;
+  trend: 'Increasing' | 'Decreasing' | 'Stable';
+}
+
+/**
+ * Strike-wise OI Distribution Item for Charts
+ */
+export interface PCRTrackerOIDistribution {
+  strikePrice: number;
+  isAtm: boolean;
+  callOI: number;
+  putOI: number;
+  callChangeOI: number;
+  putChangeOI: number;
+  pcr: number | null;
+}
+
+/**
+ * Inferred Support / Resistance Level from Open Interest concentration
+ */
+export interface InferredLevel {
+  strike: number;
+  oi?: number;
+  changeOI?: number;
+  label: string;
+  type: string;
+}
+
+export interface PCRTrackerSupportResistance {
+  majorSupport: InferredLevel | null;
+  secondarySupport: InferredLevel | null;
+  majorResistance: InferredLevel | null;
+  secondaryResistance: InferredLevel | null;
+  maxPutAddition: InferredLevel | null;
+  maxCallAddition: InferredLevel | null;
+}
+
+/**
+ * Summary for PCR Tracker Dashboard Cards
+ */
+export interface PCRTrackerSummary {
+  currentPCR: number | null;
+  previousPCR: number | null;
+  pcrChange: number;
+  pcrChangePercent: number;
+  totalPutOI: number;
+  totalCallOI: number;
+  totalPutOIChange: number;
+  totalCallOIChange: number;
+  trend: 'Increasing' | 'Decreasing' | 'Stable';
+  spotPrice: number;
+  previousSpotPrice: number;
+  spotChange: number;
+  spotChangePercent: number;
+  atmStrike: number | null;
+  interpretation: string;
+  lastUpdated?: string | null;
+}
+
+/**
+ * Full PCR Tracker Response
+ */
+export interface PCRTrackerResponse {
+  success: boolean;
+  symbol: string;
+  date: string;
+  availableDates: string[];
+  availableExpiries: string[];
+  expiry: string | null;
+  timeFrame: number;
+  startTime: string;
+  endTime: string;
+  totalIntervals: number;
+  source: string;
+  isLive: boolean;
+  lastUpdated: string | null;
+  summary: PCRTrackerSummary;
+  intervals: PCRTrackerInterval[];
+  oiDistribution: PCRTrackerOIDistribution[];
+  supportResistance: PCRTrackerSupportResistance | null;
+  message?: string;
+}
+
 
 

@@ -21,6 +21,7 @@ import {
   ExpiryCycleResponse,
   HistoricalDatesResponse,
   HistoricalExpiriesResponse,
+  PCRTrackerResponse,
 } from '../models/option-chain.model';
 
 /**
@@ -34,7 +35,7 @@ import {
 })
 export class OptionChainService {
   private http = inject(HttpClient);
-  private apiUrl = 'http://localhost:5000/api';
+  private apiUrl = 'http://localhost:3000/api';
 
   /**
    * Get all active indices.
@@ -386,5 +387,67 @@ export class OptionChainService {
       `${this.apiUrl}/option-chain/${symbol}/history/expiries${query}`
     );
   }
+
+  /**
+   * Get PCR Tracker Dashboard data including summary cards,
+   * intraday time intervals for charts, strike-wise OI distribution,
+   * and support/resistance levels inferred from OI concentration.
+   *
+   * @param symbol - Index symbol (e.g. 'NIFTY')
+   * @param options - Query parameters: date, expiry, timeFrame, startTime, endTime
+   */
+  getPCRTrackerData(
+    symbol: string = 'NIFTY',
+    options?: {
+      date?: string;
+      expiry?: string;
+      timeFrame?: number;
+      startTime?: string;
+      endTime?: string;
+    }
+  ): Observable<PCRTrackerResponse> {
+    const queryParams: string[] = [];
+    if (options?.date) {
+      queryParams.push(`date=${encodeURIComponent(options.date)}`);
+    }
+    if (options?.expiry) {
+      queryParams.push(`expiry=${encodeURIComponent(options.expiry)}`);
+    }
+    if (options?.timeFrame) {
+      queryParams.push(`timeFrame=${options.timeFrame}`);
+    }
+    if (options?.startTime) {
+      queryParams.push(`startTime=${encodeURIComponent(options.startTime)}`);
+    }
+    if (options?.endTime) {
+      queryParams.push(`endTime=${encodeURIComponent(options.endTime)}`);
+    }
+    const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
+    return this.http.get<PCRTrackerResponse>(
+      `${this.apiUrl}/option-chain/${symbol}/pcr-tracking${queryString}`
+    );
+  }
+
+  /**
+   * Auto-refresh PCR Tracker data at a specified interval.
+   * @param symbol - Index symbol
+   * @param options - Query options
+   * @param intervalMs - Refresh interval in milliseconds
+   */
+  autoRefreshPCRTrackerData(
+    symbol: string = 'NIFTY',
+    options?: {
+      date?: string;
+      expiry?: string;
+      timeFrame?: number;
+    },
+    intervalMs: number = 30000
+  ): Observable<PCRTrackerResponse> {
+    return timer(0, intervalMs).pipe(
+      switchMap(() => this.getPCRTrackerData(symbol, options)),
+      shareReplay(1)
+    );
+  }
 }
+
 

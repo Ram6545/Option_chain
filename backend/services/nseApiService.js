@@ -168,6 +168,26 @@ const makeHttpsRequest = (targetUrl, customHeaders = {}, isApi = false) => {
     });
 
     req.on('error', (err) => {
+      const isTransientReset =
+        err.code === 'ECONNRESET' ||
+        err.code === 'ETIMEDOUT' ||
+        err.code === 'EPIPE' ||
+        (err.message && err.message.includes('ECONNRESET'));
+
+      if (isTransientReset && !customHeaders._isRetry) {
+        // Destroy dead sockets lingering in agent pool
+        try {
+          httpsAgent.destroy();
+        } catch (e) {
+          // ignore
+        }
+        setTimeout(() => {
+          makeHttpsRequest(targetUrl, { ...customHeaders, _isRetry: true }, isApi)
+            .then(resolve)
+            .catch(reject);
+        }, 300);
+        return;
+      }
       reject(err);
     });
 
@@ -183,17 +203,42 @@ const initializeSession = async (force = false) => {
     return;
   }
 
-  try {
-    await makeHttpsRequest(NSE_BASE_URL, {}, false);
-    const res = await makeHttpsRequest(`${NSE_BASE_URL}/option-chain`, {
-      Referer: `${NSE_BASE_URL}/`,
-    }, false);
+  const sessionUrls = [
+    `${NSE_BASE_URL}/option-chain`,
+    `${NSE_BASE_URL}/get-quotes/derivatives?symbol=NIFTY`,
+    NSE_BASE_URL,
+  ];
 
-    if (res.statusCode === 200) {
-      lastSessionTime = Date.now();
+  let success = false;
+  for (const url of sessionUrls) {
+    try {
+      const res = await makeHttpsRequest(
+        url,
+        {
+          Referer: `${NSE_BASE_URL}/`,
+        },
+        false
+      );
+
+      if (res.statusCode === 200 || res.statusCode === 302 || res.statusCode === 304) {
+        lastSessionTime = Date.now();
+        if (cookieStore.size >= 2) {
+          success = true;
+          break;
+        }
+      }
+    } catch (err) {
+      // Clean dead pooled sockets on socket reset
+      try {
+        httpsAgent.destroy();
+      } catch (e) {
+        // ignore
+      }
     }
-  } catch (err) {
-    console.warn('⚠️ Session handshake notice:', err.message);
+  }
+
+  if (!success && cookieStore.size < 2) {
+    console.warn('⚠️ Session handshake notice: Could not refresh session cookies; continuing with existing/cached data.');
   }
 };
 
@@ -309,12 +354,12 @@ const getOptionChainData = async (symbol, expiry = null) => {
     return null;
   }
 
-  console.log('📊 [NSE API RAW RESPONSE RECEIVED]:', {
-    underlyingValue: rawData.records?.underlyingValue || rawData.filtered?.CE?.underlyingValue,
-    expiryDates: rawData.records?.expiryDates?.slice(0, 5),
-    dataRowsCount: (rawData.records?.data || rawData.filtered?.data || []).length,
-    sampleRow: (rawData.records?.data || rawData.filtered?.data || [])[0],
-  });
+  // console.log('📊 [NSE API RAW RESPONSE RECEIVED]:', {
+  //   underlyingValue: rawData.records?.underlyingValue || rawData.filtered?.CE?.underlyingValue,
+  //   expiryDates: rawData.records?.expiryDates?.slice(0, 5),
+  //   dataRowsCount: (rawData.records?.data || rawData.filtered?.data || []).length,
+  //   sampleRow: (rawData.records?.data || rawData.filtered?.data || [])[0],
+  // });
 
   const records = rawData.records || {};
   const filtered = rawData.filtered || {};

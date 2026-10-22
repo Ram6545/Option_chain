@@ -136,6 +136,11 @@ export class StrikePcrComponent implements OnInit, OnDestroy {
     return !!val && val > 0 && val === this.putChgOITop2().max2;
   }
 
+  isAtmStrike(strike: number | null | undefined): boolean {
+    if (strike == null || this.atmStrike() == null) return false;
+    return Number(strike) === Number(this.atmStrike());
+  }
+
   ngOnInit(): void {
     this.loadIndices();
     this.loadExpiries();
@@ -201,7 +206,7 @@ export class StrikePcrComponent implements OnInit, OnDestroy {
             this.pcrData.set(response.data);
             // Sync selected strike with server response if not explicitly set
             if (this.selectedStrike() === null) {
-              this.selectedStrike.set(response.data.selectedStrike);
+              this.selectedStrike.set(response.data.selectedStrike || response.data.atmStrike);
             }
           }
         },
@@ -231,9 +236,12 @@ export class StrikePcrComponent implements OnInit, OnDestroy {
   /**
    * Handle Strike Selection Change
    */
-  onStrikeChange(strike: number): void {
-    this.selectedStrike.set(strike);
-    this.fetchPCRAnalysis();
+  onStrikeChange(strike: number | string): void {
+    const num = Number(strike);
+    if (!isNaN(num) && num > 0) {
+      this.selectedStrike.set(num);
+      this.fetchPCRAnalysis();
+    }
   }
 
   /**

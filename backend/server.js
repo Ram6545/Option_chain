@@ -53,12 +53,23 @@ let lastSessionTime = 0;
 const cache = new Map();
 const CACHE_TTL_MS = 2000;
 
-// Custom HTTPS Agent with IPv4 enforcement
+// Custom HTTPS Agent with IPv4 enforcement & Chrome TLS ciphers for Akamai bypass
 const httpsAgent = new https.Agent({
   keepAlive: true,
   maxSockets: 50,
   family: 4,
-  timeout: 15000,
+  timeout: 10000,
+  ciphers: [
+    'TLS_AES_128_GCM_SHA256',
+    'TLS_AES_256_GCM_SHA384',
+    'TLS_CHACHA20_POLY1305_SHA256',
+    'ECDHE-ECDSA-AES128-GCM-SHA256',
+    'ECDHE-RSA-AES128-GCM-SHA256',
+    'ECDHE-ECDSA-AES256-GCM-SHA384',
+    'ECDHE-RSA-AES256-GCM-SHA384',
+  ].join(':'),
+  honorCipherOrder: true,
+  minVersion: 'TLSv1.2',
 });
 
 const USER_AGENT =
@@ -198,6 +209,25 @@ const makeHttpsRequest = (targetUrl, customHeaders = {}, isApi = false) => {
     });
 
     req.on('error', (err) => {
+      const isTransientReset =
+        err.code === 'ECONNRESET' ||
+        err.code === 'ETIMEDOUT' ||
+        err.code === 'EPIPE' ||
+        (err.message && err.message.includes('ECONNRESET'));
+
+      if (isTransientReset && !customHeaders._isRetry) {
+        try {
+          httpsAgent.destroy();
+        } catch (e) {
+          // ignore
+        }
+        setTimeout(() => {
+          makeHttpsRequest(targetUrl, { ...customHeaders, _isRetry: true }, isApi)
+            .then(resolve)
+            .catch(reject);
+        }, 300);
+        return;
+      }
       reject(err);
     });
 
@@ -227,7 +257,11 @@ const initSession = async (force = false) => {
         if (cookieStore.size >= 2) break;
       }
     } catch (err) {
-      // continue
+      try {
+        httpsAgent.destroy();
+      } catch (e) {
+        // ignore
+      }
     }
   }
 };
@@ -365,7 +399,7 @@ const generateMarketFallback = async (symbol, expiry = null, forcedPrice = 0) =>
   const upper = symbol.toUpperCase();
   const indexRecord = await models.getIndexBySymbol(upper);
   const step = indexRecord?.strike_step || (upper === 'BANKNIFTY' ? 100 : upper === 'MIDCPNIFTY' ? 25 : 50);
-  
+
   let underlyingPrice = forcedPrice > 0 ? forcedPrice : await resolveDynamicUnderlyingPrice(upper);
   if (underlyingPrice <= 0) {
     // Default dynamic estimate from strike step range if database is freshly initialized
@@ -495,13 +529,13 @@ const getOptionChain = async (symbol, expiry = null) => {
     return fallbackChain;
   }
 
-  console.log('📊 [NSE API RESPONSE RECEIVED FOR', upper, ']:', {
-    underlyingValue: raw.records?.underlyingValue || raw.filtered?.CE?.underlyingValue,
-    timestamp: raw.records?.timestamp || raw.filtered?.timestamp,
-    expiryDates: raw.records?.expiryDates?.slice(0, 5),
-    dataRowsCount: (raw.records?.data || raw.filtered?.data || []).length,
-    sampleRowFirst: (raw.records?.data || raw.filtered?.data || [])[0],
-  });
+  // console.log('📊 [NSE API RESPONSE RECEIVED FOR', upper, ']:', {
+  //   underlyingValue: raw.records?.underlyingValue || raw.filtered?.CE?.underlyingValue,
+  //   timestamp: raw.records?.timestamp || raw.filtered?.timestamp,
+  //   expiryDates: raw.records?.expiryDates?.slice(0, 5),
+  //   dataRowsCount: (raw.records?.data || raw.filtered?.data || []).length,
+  //   sampleRowFirst: (raw.records?.data || raw.filtered?.data || [])[0],
+  // });
 
   const records = raw.records || {};
   const filtered = raw.filtered || {};
@@ -786,6 +820,31 @@ app.get('/api/option-chain/history/:date', (req, res) => {
   return handleHistoricalReplay(req, res);
 });
 
+// PCR Tracking Dashboard Endpoints
+const handlePCRTracking = async (req, res) => {
+  const symbol = req.params.symbol || req.query.symbol || 'NIFTY';
+  const { date, expiry, startTime, endTime, timeFrame } = req.query;
+
+  try {
+    const result = await historicalReplayService.getPCRTracking(symbol, {
+      date: date || req.params.date,
+      expiry,
+      startTime,
+      endTime,
+      timeFrame,
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+};
+
+app.get('/api/option-chain/pcr-tracking', handlePCRTracking);
+app.get('/api/option-chain/:symbol/pcr-tracking', handlePCRTracking);
+app.get('/api/pcr-tracking', handlePCRTracking);
+app.get('/api/pcr-tracking/:symbol', handlePCRTracking);
+
+
 // Dynamic Seeder Endpoint: Populates PostgreSQL table with historical snapshots for any date
 app.all(['/api/option-chain/history/seed', '/api/option-chain/:symbol/history/seed'], async (req, res) => {
   const symbol = req.params.symbol || req.query.symbol || req.body?.symbol || 'NIFTY';
@@ -848,7 +907,7 @@ app.get(['/api/option-chain/current', '/api/option-chain/:symbol/current'], asyn
     const chain = await getOptionChain(symbol, targetExpiry);
 
     // Auto-save live snapshot to PostgreSQL in background so DB history accumulates dynamically
-    expiryCycleService.saveSnapshotWithCycle(symbol, chain).catch(() => {});
+    expiryCycleService.saveSnapshotWithCycle(symbol, chain).catch(() => { });
 
     res.json({
       success: true,
@@ -883,7 +942,7 @@ app.get(['/api/option-chain/:symbol', '/api/option-chain/:symbol/live'], async (
     const chain = await getOptionChain(symbol, expiry);
 
     // Auto-save snapshot into PostgreSQL in background
-    expiryCycleService.saveSnapshotWithCycle(symbol, chain).catch(() => {});
+    expiryCycleService.saveSnapshotWithCycle(symbol, chain).catch(() => { });
 
     let strikes = chain.strikes;
     const limitNum = parseInt(limit, 10);

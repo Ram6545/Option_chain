@@ -202,6 +202,53 @@ const calculateATMStrike = (underlyingPrice, strikeStep = 50, availableStrikes =
  * @param {number} strikeRange - Number of strikes on each side of ATM (default: 3)
  * @returns {Object} { pcr, averagePCR, totalCallOI, totalPutOI, atmSelectedStrikes }
  */
+/**
+ * Safe PCR Calculation: Total Put OI / Total Call OI.
+ * Safe handling of zero or missing Call OI: returns null safely (never throws or outputs Infinity/NaN).
+ * If Put OI is 0 and Call OI is 0: returns 0.
+ *
+ * @param {number} putOI
+ * @param {number} callOI
+ * @returns {number|null}
+ */
+const calculateSafePCR = (putOI, callOI) => {
+  const p = Number(putOI);
+  const c = Number(callOI);
+  if (isNaN(c) || c <= 0) {
+    return (!isNaN(p) && p === 0) ? 0 : null;
+  }
+  if (isNaN(p) || p < 0) {
+    return 0;
+  }
+  return parseFloat((p / c).toFixed(4));
+};
+
+/**
+ * Determine PCR trend from PCR change.
+ * Increasing: change > +0.02
+ * Decreasing: change < -0.02
+ * Stable: within [-0.02, +0.02]
+ *
+ * @param {number|null} pcrChange
+ * @returns {'Increasing' | 'Decreasing' | 'Stable'}
+ */
+const determinePCRTrend = (pcrChange) => {
+  if (pcrChange === null || pcrChange === undefined || isNaN(pcrChange)) {
+    return 'Stable';
+  }
+  if (pcrChange > 0.02) return 'Increasing';
+  if (pcrChange < -0.02) return 'Decreasing';
+  return 'Stable';
+};
+
+/**
+ * Calculate Total PCR, Average PCR around ATM, and OI totals.
+ *
+ * @param {Array} strikesList - Array of strike objects with { strikePrice, ce: { oi, changeOI }, pe: { oi, changeOI } }
+ * @param {number} atmStrike - ATM strike price
+ * @param {number} strikeRange - Number of strikes on each side of ATM (default: 3)
+ * @returns {Object} { pcr, averagePCR, totalCallOI, totalPutOI, totalCallChangeOI, totalPutChangeOI, atmSelectedStrikes }
+ */
 const calculateSnapshotPCR = (strikesList, atmStrike, strikeRange = 3) => {
   if (!strikesList || strikesList.length === 0) {
     return {
@@ -209,6 +256,8 @@ const calculateSnapshotPCR = (strikesList, atmStrike, strikeRange = 3) => {
       averagePCR: 0,
       totalCallOI: 0,
       totalPutOI: 0,
+      totalCallChangeOI: 0,
+      totalPutChangeOI: 0,
       atmSelectedStrikes: [],
     };
   }
@@ -216,13 +265,18 @@ const calculateSnapshotPCR = (strikesList, atmStrike, strikeRange = 3) => {
   const sorted = [...strikesList].sort((a, b) => a.strikePrice - b.strikePrice);
   let totalCallOI = 0;
   let totalPutOI = 0;
+  let totalCallChangeOI = 0;
+  let totalPutChangeOI = 0;
 
   for (const s of sorted) {
     totalCallOI += s.ce?.oi || 0;
     totalPutOI += s.pe?.oi || 0;
+    totalCallChangeOI += s.ce?.changeOI || 0;
+    totalPutChangeOI += s.pe?.changeOI || 0;
   }
 
-  const pcr = totalCallOI > 0 ? parseFloat((totalPutOI / totalCallOI).toFixed(2)) : 0;
+  const safePCRVal = calculateSafePCR(totalPutOI, totalCallOI);
+  const pcr = safePCRVal !== null ? parseFloat(safePCRVal.toFixed(2)) : 0;
 
   // Selected strikes around ATM (ATM ± strikeRange)
   let atmIdx = sorted.findIndex((s) => s.strikePrice === atmStrike);
@@ -243,13 +297,16 @@ const calculateSnapshotPCR = (strikesList, atmStrike, strikeRange = 3) => {
     atmPutOI += s.pe?.oi || 0;
   }
 
-  const averagePCR = atmCallOI > 0 ? parseFloat((atmPutOI / atmCallOI).toFixed(2)) : 0;
+  const avgSafePCR = calculateSafePCR(atmPutOI, atmCallOI);
+  const averagePCR = avgSafePCR !== null ? parseFloat(avgSafePCR.toFixed(2)) : 0;
 
   return {
     pcr,
     averagePCR,
     totalCallOI,
     totalPutOI,
+    totalCallChangeOI,
+    totalPutChangeOI,
     atmSelectedStrikes: selectedStrikes.map((s) => s.strikePrice),
   };
 };
@@ -522,13 +579,474 @@ const getAvailableExpiries = async (symbol = 'NIFTY', date = null) => {
   return await models.getAvailableHistoricalExpiries(index.id, date);
 };
 
+/**
+ * Get comprehensive PCR Tracking Data including summary cards,
+ * time-series intervals for interactive graphs, strike-wise OI distribution,
+ * and support/resistance zones inferred from OI concentration.
+ *
+ * @param {string} symbol - Index symbol (e.g. 'NIFTY')
+ * @param {Object} options - { date, expiry, timeFrame, startTime, endTime }
+ * @returns {Promise<Object>} PCR tracking dashboard payload
+ */
+const getPCRTracking = async (symbol = 'NIFTY', options = {}) => {
+  const upper = (symbol || 'NIFTY').toUpperCase().trim();
+  const indexRecord = await models.getIndexBySymbol(upper);
+  if (!indexRecord) {
+    throw new Error(`Index not found for symbol: ${upper}`);
+  }
+
+  const strikeStep = indexRecord?.strike_step || (upper === 'BANKNIFTY' ? 100 : 50);
+
+  // 1. Resolve trading date: provided date -> check today in DB -> latest available DB date
+  const todayISO = new Date().toISOString().slice(0, 10);
+  let dateStr = options.date ? String(options.date).trim() : null;
+
+  if (dateStr && dateStr.includes('-')) {
+    const parts = dateStr.split('-');
+    if (parts[0].length === 2 && parts[2].length === 4) {
+      dateStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+  }
+
+  const availableDates = await models.getAvailableHistoricalDates(indexRecord.id);
+
+  if (!dateStr) {
+    // If today is in availableDates, use today; otherwise default to latest available trading date
+    if (availableDates.includes(todayISO)) {
+      dateStr = todayISO;
+    } else if (availableDates.length > 0) {
+      dateStr = availableDates[0];
+    } else {
+      dateStr = todayISO;
+    }
+  }
+
+  // 2. Resolve expiry date
+  let expiryStr = options.expiry ? String(options.expiry).trim() : null;
+  let expiryISO = null;
+  if (expiryStr) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(expiryStr)) {
+      expiryISO = expiryStr;
+    } else {
+      const parts = expiryStr.split('-');
+      if (parts.length === 3) {
+        const monthMap = {
+          jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+          jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
+        };
+        const m = monthMap[parts[1].toLowerCase()];
+        const y = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+        if (m) expiryISO = `${y}-${m}-${String(parts[0]).padStart(2, '0')}`;
+      }
+    }
+  }
+
+  const availableExpiries = await models.getAvailableHistoricalExpiries(indexRecord.id, dateStr);
+  if (!expiryISO && availableExpiries.length > 0) {
+    expiryISO = availableExpiries[0];
+  }
+
+  const startTime = options.startTime ? String(options.startTime).trim() : '09:15';
+  const endTime = options.endTime ? String(options.endTime).trim() : '15:30';
+  const timeFrame = Math.max(1, parseInt(options.timeFrame, 10) || 1);
+  const startMinutes = timeToMinutes(startTime);
+  const endMinutes = timeToMinutes(endTime);
+
+  // 3. Query PostgreSQL snapshots
+  let snapshots = [];
+  try {
+    snapshots = await models.getHistoricalSnapshotsByRange(
+      indexRecord.id,
+      dateStr,
+      expiryISO,
+      startTime,
+      endTime
+    );
+  } catch (err) {
+    console.warn(`⚠️ Error querying snapshots for ${upper} on ${dateStr}:`, err.message);
+  }
+
+  // Fallback without strict expiry filter if 0 returned
+  if ((!snapshots || snapshots.length === 0) && expiryISO) {
+    try {
+      const anySnaps = await models.getHistoricalSnapshotsByRange(
+        indexRecord.id,
+        dateStr,
+        null,
+        startTime,
+        endTime
+      );
+      if (anySnaps && anySnaps.length > 0) {
+        snapshots = anySnaps;
+      }
+    } catch (e) {}
+  }
+
+  // If no snapshots found, return structured empty state
+  if (!snapshots || snapshots.length === 0) {
+    return {
+      success: true,
+      symbol: upper,
+      date: dateStr,
+      availableDates,
+      availableExpiries,
+      expiry: expiryISO || null,
+      timeFrame,
+      startTime,
+      endTime,
+      totalIntervals: 0,
+      source: 'database',
+      isLive: false,
+      lastUpdated: null,
+      summary: {
+        currentPCR: null,
+        previousPCR: null,
+        pcrChange: 0,
+        pcrChangePercent: 0,
+        totalPutOI: 0,
+        totalCallOI: 0,
+        totalPutOIChange: 0,
+        totalCallOIChange: 0,
+        trend: 'Stable',
+        spotPrice: 0,
+        previousSpotPrice: 0,
+        spotChange: 0,
+        spotChangePercent: 0,
+        atmStrike: null,
+        interpretation: 'No snapshot data found for the selected session.',
+      },
+      intervals: [],
+      oiDistribution: [],
+      supportResistance: null,
+      message: `No snapshot records found in database for ${upper} on ${dateStr}`,
+    };
+  }
+
+  // 4. Map snapshots with IST minutes
+  const snapshotList = [];
+  for (const s of snapshots) {
+    let hours = 9;
+    let mins = 15;
+    if (s.timestamp) {
+      const d = new Date(s.timestamp);
+      const timeStr = d.toLocaleTimeString('en-GB', {
+        timeZone: 'Asia/Kolkata',
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      const parts = timeStr.split(':').map(Number);
+      hours = parts[0];
+      mins = parts[1];
+    }
+    const minutes = hours * 60 + mins;
+    if (minutes >= startMinutes && minutes <= endMinutes) {
+      const slotTime = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+      snapshotList.push({
+        ...s,
+        minutes,
+        timeStr: slotTime,
+      });
+    }
+  }
+
+  // 5. Bucket snapshots by timeFrame
+  const bucketMap = new Map();
+  for (const snap of snapshotList) {
+    let bucketKey;
+    if (timeFrame <= 1) {
+      bucketKey = snap.timeStr;
+    } else {
+      const offset = snap.minutes - startMinutes;
+      const bucketIndex = Math.floor(offset / timeFrame);
+      const bucketMinute = startMinutes + bucketIndex * timeFrame;
+      bucketKey = minutesToTime(bucketMinute);
+    }
+    bucketMap.set(bucketKey, snap);
+  }
+
+  const sortedBucketKeys = Array.from(bucketMap.keys()).sort(
+    (a, b) => timeToMinutes(a) - timeToMinutes(b)
+  );
+
+  // 6. Build intervals
+  const intervals = [];
+  let latestRawStrikes = [];
+
+  for (let i = 0; i < sortedBucketKeys.length; i++) {
+    const key = sortedBucketKeys[i];
+    const snap = bucketMap.get(key);
+    const underlyingPrice = parseFloat(snap.underlying_price) || 0;
+    const rawOptions = snap.options || [];
+
+    const strikesMap = new Map();
+    for (const opt of rawOptions) {
+      if (!opt || opt.strike_price === null || opt.strike_price === undefined) continue;
+      const sPrice = parseFloat(opt.strike_price);
+      if (isNaN(sPrice)) continue;
+
+      if (!strikesMap.has(sPrice)) {
+        strikesMap.set(sPrice, { strikePrice: sPrice, ce: null, pe: null });
+      }
+
+      const entry = strikesMap.get(sPrice);
+      const type = (opt.option_type || '').toUpperCase();
+      const optDetails = {
+        oi: parseInt(opt.oi, 10) || 0,
+        changeOI: parseInt(opt.change_oi, 10) || 0,
+        ltp: parseFloat(opt.ltp) || 0,
+        change: parseFloat(opt.change) || 0,
+        volume: parseInt(opt.volume, 10) || 0,
+        iv: parseFloat(opt.iv) || 0,
+      };
+
+      if (type === 'CE') entry.ce = optDetails;
+      else if (type === 'PE') entry.pe = optDetails;
+    }
+
+    const strikesList = Array.from(strikesMap.values()).sort((a, b) => a.strikePrice - b.strikePrice);
+    if (i === sortedBucketKeys.length - 1) {
+      latestRawStrikes = strikesList;
+    }
+
+    const availableStrikes = strikesList.map((s) => s.strikePrice);
+    const atmStrike = calculateATMStrike(underlyingPrice, strikeStep, availableStrikes);
+
+    let totalCallOI = 0;
+    let totalPutOI = 0;
+    let totalCallChangeOI = 0;
+    let totalPutChangeOI = 0;
+
+    for (const s of strikesList) {
+      totalCallOI += s.ce?.oi || 0;
+      totalPutOI += s.pe?.oi || 0;
+      totalCallChangeOI += s.ce?.changeOI || 0;
+      totalPutChangeOI += s.pe?.changeOI || 0;
+    }
+
+    const pcr = calculateSafePCR(totalPutOI, totalCallOI);
+    const prevInterval = intervals.length > 0 ? intervals[intervals.length - 1] : null;
+
+    let pcrChange = 0;
+    let pcrChangePercent = 0;
+    if (prevInterval && prevInterval.pcr !== null && pcr !== null) {
+      pcrChange = parseFloat((pcr - prevInterval.pcr).toFixed(4));
+      if (prevInterval.pcr > 0) {
+        pcrChangePercent = parseFloat(((pcrChange / prevInterval.pcr) * 100).toFixed(2));
+      }
+    }
+
+    const trend = determinePCRTrend(pcrChange);
+    const spotChange = prevInterval
+      ? parseFloat((underlyingPrice - prevInterval.spotPrice).toFixed(2))
+      : 0;
+
+    intervals.push({
+      timestamp: key,
+      fullTimestamp: snap.timestamp,
+      spotPrice: underlyingPrice,
+      spotChange,
+      atmStrike,
+      putOI: totalPutOI,
+      callOI: totalCallOI,
+      putOIChange: totalPutChangeOI,
+      callOIChange: totalCallChangeOI,
+      pcr,
+      previousPCR: prevInterval ? prevInterval.pcr : pcr,
+      pcrChange,
+      pcrChangePercent,
+      trend,
+    });
+  }
+
+  // 7. Calculate Strike-wise OI Distribution and Inferred Support/Resistance
+  const oiDistribution = [];
+  let supportResistance = null;
+
+  if (latestRawStrikes.length > 0) {
+    const latestSpot = intervals[intervals.length - 1].spotPrice;
+    const availableStrikes = latestRawStrikes.map((s) => s.strikePrice);
+    const atmStrike = calculateATMStrike(latestSpot, strikeStep, availableStrikes);
+
+    // Filter to a window around ATM (e.g. ±12 strikes = 25 strikes total)
+    const atmIdx = latestRawStrikes.findIndex((s) => s.strikePrice === atmStrike);
+    const windowRange = 12;
+    const startIdx = Math.max(0, atmIdx - windowRange);
+    const endIdx = Math.min(latestRawStrikes.length - 1, atmIdx + windowRange);
+    const windowStrikes = latestRawStrikes.slice(startIdx, endIdx + 1);
+
+    for (const s of windowStrikes) {
+      const callOI = s.ce?.oi || 0;
+      const putOI = s.pe?.oi || 0;
+      const callChangeOI = s.ce?.changeOI || 0;
+      const putChangeOI = s.pe?.changeOI || 0;
+      const strikePcr = calculateSafePCR(putOI, callOI);
+
+      oiDistribution.push({
+        strikePrice: s.strikePrice,
+        isAtm: s.strikePrice === atmStrike,
+        callOI,
+        putOI,
+        callChangeOI,
+        putChangeOI,
+        pcr: strikePcr,
+      });
+    }
+
+    // Determine Inferred Support and Resistance from OI Concentration
+    const sortedByPutOI = [...latestRawStrikes].sort((a, b) => (b.pe?.oi || 0) - (a.pe?.oi || 0));
+    const sortedByCallOI = [...latestRawStrikes].sort((a, b) => (b.ce?.oi || 0) - (a.ce?.oi || 0));
+    const sortedByPutChg = [...latestRawStrikes].sort((a, b) => (b.pe?.changeOI || 0) - (a.pe?.changeOI || 0));
+    const sortedByCallChg = [...latestRawStrikes].sort((a, b) => (b.ce?.changeOI || 0) - (a.ce?.changeOI || 0));
+
+    const majorSupportStrike = sortedByPutOI[0] || null;
+    const secSupportStrike = sortedByPutOI[1] || null;
+    const majorResistStrike = sortedByCallOI[0] || null;
+    const secResistStrike = sortedByCallOI[1] || null;
+    const maxPutAddStrike = sortedByPutChg[0] || null;
+    const maxCallAddStrike = sortedByCallChg[0] || null;
+
+    supportResistance = {
+      majorSupport: majorSupportStrike
+        ? {
+            strike: majorSupportStrike.strikePrice,
+            oi: majorSupportStrike.pe?.oi || 0,
+            label: 'Major Support (Max Put OI)',
+            type: 'inferred',
+          }
+        : null,
+      secondarySupport: secSupportStrike
+        ? {
+            strike: secSupportStrike.strikePrice,
+            oi: secSupportStrike.pe?.oi || 0,
+            label: 'Secondary Support (2nd Max Put OI)',
+            type: 'inferred',
+          }
+        : null,
+      majorResistance: majorResistStrike
+        ? {
+            strike: majorResistStrike.strikePrice,
+            oi: majorResistStrike.ce?.oi || 0,
+            label: 'Major Resistance (Max Call OI)',
+            type: 'inferred',
+          }
+        : null,
+      secondaryResistance: secResistStrike
+        ? {
+            strike: secResistStrike.strikePrice,
+            oi: secResistStrike.ce?.oi || 0,
+            label: 'Secondary Resistance (2nd Max Call OI)',
+            type: 'inferred',
+          }
+        : null,
+      maxPutAddition: maxPutAddStrike
+        ? {
+            strike: maxPutAddStrike.strikePrice,
+            changeOI: maxPutAddStrike.pe?.changeOI || 0,
+            label: 'Max Put OI Addition (Bullish Buildup)',
+            type: 'inferred',
+          }
+        : null,
+      maxCallAddition: maxCallAddStrike
+        ? {
+            strike: maxCallAddStrike.strikePrice,
+            changeOI: maxCallAddStrike.ce?.changeOI || 0,
+            label: 'Max Call OI Addition (Bearish Buildup)',
+            type: 'inferred',
+          }
+        : null,
+    };
+  }
+
+  // 8. Generate Summary for Dashboard Cards
+  const latestInterval = intervals[intervals.length - 1];
+  const firstInterval = intervals[0];
+  const prevInterval = intervals.length > 1 ? intervals[intervals.length - 2] : firstInterval;
+
+  const currentPCR = latestInterval.pcr;
+  const previousPCR = prevInterval ? prevInterval.pcr : currentPCR;
+  const pcrChange =
+    currentPCR !== null && previousPCR !== null
+      ? parseFloat((currentPCR - previousPCR).toFixed(4))
+      : 0;
+  const pcrChangePercent =
+    previousPCR > 0 && currentPCR !== null
+      ? parseFloat(((pcrChange / previousPCR) * 100).toFixed(2))
+      : 0;
+
+  const currentSpot = latestInterval.spotPrice;
+  const firstSpot = firstInterval.spotPrice;
+  const spotChange = parseFloat((currentSpot - firstSpot).toFixed(2));
+  const spotChangePercent =
+    firstSpot > 0 ? parseFloat(((spotChange / firstSpot) * 100).toFixed(2)) : 0;
+
+  // Trading educational interpretation
+  let interpretation = 'Stable PCR: Put and call open interest are moving in relative equilibrium.';
+  if (currentPCR !== null) {
+    if (pcrChange > 0.02) {
+      interpretation =
+        'Rising PCR: Increasing put open interest relative to call open interest. Often indicates put writing/support building.';
+    } else if (pcrChange < -0.02) {
+      interpretation =
+        'Falling PCR: Increasing call open interest relative to put open interest. Often indicates call writing/overhead resistance.';
+    }
+    if (currentPCR > 1.3) {
+      interpretation += ' Extreme high PCR (>1.30): Strongly bullish OI buildup, but may near overbought territory.';
+    } else if (currentPCR < 0.7) {
+      interpretation += ' Extreme low PCR (<0.70): Heavy call buildup/bearish OI, but may near oversold territory.';
+    }
+  }
+
+  const detectedExpiry = expiryISO || (snapshots[0]?.expiry_date ? new Date(snapshots[0].expiry_date).toISOString().slice(0, 10) : null);
+
+  return {
+    success: true,
+    symbol: upper,
+    date: dateStr,
+    availableDates,
+    availableExpiries,
+    expiry: detectedExpiry,
+    timeFrame,
+    startTime,
+    endTime,
+    totalIntervals: intervals.length,
+    source: 'database',
+    isLive: false,
+    lastUpdated: snapshots[snapshots.length - 1]?.timestamp || new Date().toISOString(),
+    summary: {
+      currentPCR,
+      previousPCR,
+      pcrChange,
+      pcrChangePercent,
+      totalPutOI: latestInterval.putOI,
+      totalCallOI: latestInterval.callOI,
+      totalPutOIChange: latestInterval.putOIChange,
+      totalCallOIChange: latestInterval.callOIChange,
+      trend: latestInterval.trend,
+      spotPrice: currentSpot,
+      previousSpotPrice: firstSpot,
+      spotChange,
+      spotChangePercent,
+      atmStrike: latestInterval.atmStrike,
+      interpretation,
+    },
+    intervals,
+    oiDistribution,
+    supportResistance,
+  };
+};
+
 module.exports = {
   generateTimeSlots,
   calculateATMStrike,
   calculateSnapshotPCR,
+  calculateSafePCR,
+  determinePCRTrend,
   getHistoricalReplay,
+  getPCRTracking,
   getAvailableDates,
   getAvailableExpiries,
   validateTradingDate,
   findNearestTradingDate,
 };
+
