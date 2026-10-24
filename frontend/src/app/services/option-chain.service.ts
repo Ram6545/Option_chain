@@ -23,6 +23,7 @@ import {
   HistoricalExpiriesResponse,
   PCRTrackerResponse,
 } from '../models/option-chain.model';
+import { OptionVWAPResponse } from '../models/option-vwap.model';
 
 /**
  * Option Chain Service
@@ -447,6 +448,25 @@ export class OptionChainService {
       switchMap(() => this.getPCRTrackerData(symbol, options)),
       shareReplay(1)
     );
+  }
+
+  /**
+   * Fetch Option Chain VWAP data for ATM ±5 strikes (11 strikes × 2 = 22 contracts).
+   *
+   * @param symbol - Index symbol (default 'NIFTY')
+   * @param options - { expiry?: string, date?: string }
+   */
+  getOptionChainVWAP(
+    symbol: string = 'NIFTY',
+    options?: { expiry?: string; date?: string }
+  ): Observable<OptionVWAPResponse> {
+    const queryParams: string[] = [];
+    if (symbol) queryParams.push(`symbol=${encodeURIComponent(symbol)}`);
+    if (options?.expiry) queryParams.push(`expiry=${encodeURIComponent(options.expiry)}`);
+    if (options?.date) queryParams.push(`date=${encodeURIComponent(options.date)}`);
+    const qs = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
+
+    return this.http.get<OptionVWAPResponse>(`${this.apiUrl}/options/vwap${qs}`);
   }
 }
 

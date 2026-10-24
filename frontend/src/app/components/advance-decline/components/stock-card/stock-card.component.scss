@@ -1,0 +1,116 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+.stock-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border-radius: 6px;
+  padding: 5px 8px;
+  min-height: 44px;
+  box-sizing: border-box;
+  color: #111827;
+  user-select: none;
+  cursor: pointer;
+  transition: transform 0.12s ease,
+              box-shadow 0.12s ease,
+              border-color 0.12s ease;
+  outline: none;
+  border: 1px solid transparent;
+
+  /* Theme color states according to specification */
+  &.positive {
+    background-color: #D1FAE5;
+    border-color: rgba(16, 185, 129, 0.3);
+
+    &:hover {
+      border-color: rgba(5, 150, 105, 0.55);
+    }
+  }
+
+  &.negative {
+    background-color: #FECACA;
+    border-color: rgba(239, 68, 68, 0.3);
+
+    &:hover {
+      border-color: rgba(220, 38, 38, 0.55);
+    }
+  }
+
+  &.neutral {
+    background-color: #E5E7EB;
+    border-color: rgba(156, 163, 175, 0.35);
+
+    &:hover {
+      border-color: rgba(107, 114, 128, 0.6);
+    }
+  }
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(17, 24, 39, 0.1);
+  }
+
+  &:focus-visible {
+    box-shadow: 0 0 0 2px #0b5cab;
+  }
+}
+
+.card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 4px;
+}
+
+.top-row {
+  margin-bottom: 2px;
+}
+
+.stock-symbol {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: #111827;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.contrib-tag {
+  font-size: 9.5px;
+  font-weight: 600;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(17, 24, 39, 0.08);
+  color: #111827;
+  letter-spacing: -0.1px;
+  white-space: nowrap;
+  line-height: 14px;
+}
+
+.bottom-row {
+  align-items: baseline;
+}
+
+.stock-price {
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.15;
+  color: #111827;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+}
+
+.stock-percent {
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: #111827;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+}

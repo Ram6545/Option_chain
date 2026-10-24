@@ -22,6 +22,28 @@ body {
   background-color: #ffffff;
 }
 
+/* Material Icons display robustness */
+.mat-icon, .material-icons {
+  font-family: 'Material Icons' !important;
+  font-style: normal;
+  font-weight: normal;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  text-transform: none;
+  letter-spacing: normal;
+  word-wrap: normal;
+  white-space: nowrap;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'liga';
+  vertical-align: middle;
+  overflow: hidden;
+}
+
 /* Custom subtle scrollbar */
 ::-webkit-scrollbar {
   width: 7px;

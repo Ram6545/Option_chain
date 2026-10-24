@@ -1,35 +1,90 @@
 <mat-toolbar class="app-toolbar">
+  <!-- 1. Brand Identity -->
   <div class="logo-group">
-    <mat-icon class="logo-icon">show_chart</mat-icon>
-    <span class="app-title">NIFTY / Bank NIFTY Option Chain</span>
+    <div class="brand-badge">
+      <mat-icon class="logo-icon">candlestick_chart</mat-icon>
+    </div>
+    <div class="brand-text">
+      <div class="title-line">
+        <span class="app-title">NIFTY / Bank NIFTY Option Chain</span>
+        <span class="badge-exchange">NSE F&O</span>
+      </div>
+    </div>
   </div>
 
-  <span class="spacer"></span>
-
-  <nav class="nav-links">
+  <!-- 2. Segmented Navigation Track -->
+  <nav class="nav-segment" aria-label="Main Navigation">
     <a mat-button routerLink="/option-chain" routerLinkActive="active-link" class="nav-item">
       <mat-icon class="nav-icon">table_chart</mat-icon>
-      <span>Option Chain</span>
+      <span class="nav-label">
+        <span class="label-full">Option Chain</span>
+        <span class="label-short">Chain</span>
+      </span>
     </a>
+
+    <a mat-button routerLink="/advance-decline" routerLinkActive="active-link" class="nav-item">
+      <mat-icon class="nav-icon">waterfall_chart</mat-icon>
+      <span class="nav-label">
+        <span class="label-full">Advance–Decline</span>
+        <span class="label-short">Adv–Dec</span>
+      </span>
+    </a>
+
+    <a mat-button routerLink="/vwap" routerLinkActive="active-link" class="nav-item">
+      <mat-icon class="nav-icon">query_stats</mat-icon>
+      <span class="nav-label">
+        <span class="label-full">Option VWAP</span>
+        <span class="label-short">VWAP</span>
+      </span>
+    </a>
+
     <a mat-button routerLink="/oi-analysis" routerLinkActive="active-link" class="nav-item">
       <mat-icon class="nav-icon">analytics</mat-icon>
-      <span>OI Analysis</span>
+      <span class="nav-label">
+        <span class="label-full">OI Analysis</span>
+        <span class="label-short">OI</span>
+      </span>
     </a>
+
     <a mat-button routerLink="/strike-pcr" routerLinkActive="active-link" class="nav-item">
       <mat-icon class="nav-icon">donut_large</mat-icon>
-      <span>Strike PCR</span>
+      <span class="nav-label">
+        <span class="label-full">Strike PCR</span>
+        <span class="label-short">Strike PCR</span>
+      </span>
     </a>
+
     <a mat-button routerLink="/pcr-tracker" routerLinkActive="active-link" class="nav-item">
       <mat-icon class="nav-icon">insights</mat-icon>
-      <span>PCR Tracker</span>
+      <span class="nav-label">
+        <span class="label-full">PCR Tracker</span>
+        <span class="label-short">Tracker</span>
+      </span>
     </a>
+
     <a mat-button routerLink="/historical-replay" routerLinkActive="active-link" class="nav-item replay-nav-item">
       <mat-icon class="nav-icon">play_circle_filled</mat-icon>
-      <span>Historical Replay</span>
+      <span class="nav-label">
+        <span class="label-full">Historical Replay</span>
+        <span class="label-short">Replay</span>
+      </span>
     </a>
   </nav>
+
+  <!-- 3. Right-Side Market Status & Clock Utility -->
+  <div class="utility-group">
+    <div class="market-status" [class.is-open]="isMarketOpen()" [class.is-closed]="!isMarketOpen()" matTooltip="NSE Market Hours: Mon-Fri 09:15 - 15:30 IST">
+      <span class="status-dot"></span>
+      <span class="status-label">{{ isMarketOpen() ? 'NSE LIVE' : 'NSE CLOSED' }}</span>
+    </div>
+
+    <div class="clock-chip" matTooltip="Indian Standard Time">
+      <mat-icon class="clock-icon">schedule</mat-icon>
+      <span class="clock-val">{{ currentTime() }}</span>
+    </div>
+  </div>
 </mat-toolbar>
 
 <main class="main-content">
   <router-outlet />
-</main>
+</main>

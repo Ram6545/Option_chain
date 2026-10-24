@@ -1,0 +1,338 @@
+<div class="option-vwap-container">
+  <!-- 1. Top Compact Control & Navigation Toolbar -->
+  <header class="vwap-toolbar">
+    <div class="toolbar-left">
+      <!-- Title & Live Badge -->
+      <div class="title-wrap">
+        <mat-icon class="title-icon">candlestick_chart</mat-icon>
+        <span class="vwap-title">Option Chain VWAP</span>
+        <span class="atm-window-tag">ATM ±5 Strikes</span>
+      </div>
+
+      <!-- Index Selector Pills -->
+      <div class="index-selector">
+        @for (idx of availableIndices; track idx) {
+          <button
+            type="button"
+            class="index-btn"
+            [class.active]="symbol() === idx"
+            (click)="onSymbolChange(idx)"
+          >
+            {{ idx }}
+          </button>
+        }
+      </div>
+
+      <!-- Spot Price & ATM Badge -->
+      <div class="metric-chip spot-chip">
+        <span class="chip-label">SPOT</span>
+        <span class="chip-val">{{ formatPrice(spotPrice()) }}</span>
+      </div>
+
+      <div class="metric-chip atm-chip" matTooltip="Central At-The-Money Strike">
+        <span class="chip-label">ATM</span>
+        <span class="chip-val atm-bold">{{ formatPrice(atmStrike()) }}</span>
+        <span class="step-badge">±{{ strikeInterval() }}</span>
+      </div>
+    </div>
+
+    <div class="toolbar-right">
+      <!-- Historical / Session Date Selector -->
+      @if (availableDates().length > 0) {
+        <div class="control-group">
+          <label class="ctrl-label">DATE</label>
+          <select class="ctrl-select" [value]="selectedDate()" (change)="onDateChange($any($event.target).value)">
+            @for (d of availableDates(); track d) {
+              <option [value]="d">{{ d }}</option>
+            }
+          </select>
+        </div>
+      }
+
+      <!-- Expiry Selector -->
+      @if (selectedExpiry()) {
+        <div class="control-group">
+          <label class="ctrl-label">EXPIRY</label>
+          <span class="expiry-pill">{{ selectedExpiry() }}</span>
+        </div>
+      }
+
+      <!-- Auto-Refresh Toggle -->
+      <button
+        type="button"
+        class="auto-refresh-btn"
+        [class.is-active]="autoRefreshEnabled()"
+        (click)="toggleAutoRefresh()"
+        matTooltip="Auto-refresh every 15 seconds"
+      >
+        <span class="pulse-dot" [class.running]="autoRefreshEnabled()"></span>
+        <span>Auto {{ countdown() }}s</span>
+      </button>
+
+      <!-- Manual Refresh Button -->
+      <button
+        type="button"
+        class="refresh-btn"
+        (click)="onManualRefresh()"
+        [disabled]="isLoading() || isRefreshing()"
+        matTooltip="Refresh latest option chain & VWAP prices"
+      >
+        <mat-icon [class.spin-anim]="isRefreshing()">refresh</mat-icon>
+        <span>Refresh</span>
+      </button>
+
+      <!-- Timestamp -->
+      @if (lastUpdated()) {
+        <span class="time-label" matTooltip="Last updated time">
+          {{ lastUpdated() | date:'shortTime' }}
+        </span>
+      }
+    </div>
+  </header>
+
+  <!-- 2. Integrated Advance-Decline Ratio & Market Breadth Strip ("show in advance decline ratio") -->
+  @if (marketBreadth(); as mb) {
+    <section class="breadth-strip" aria-label="NSE Market Breadth & Advance Decline Context">
+      <div class="breadth-header">
+        <div class="breadth-title-group">
+          <mat-icon class="breadth-icon">waterfall_chart</mat-icon>
+          <span class="breadth-heading">Market Breadth Correlation</span>
+          <span class="index-tag">{{ mb.index }}</span>
+        </div>
+
+        <!-- Breadth Sentiment Pill -->
+        <div class="sentiment-pill" [class]="mb.sentiment">
+          <span>A/D Ratio: {{ mb.adRatio }}</span>
+          <span class="sentiment-badge">{{ mb.sentiment | uppercase }}</span>
+        </div>
+      </div>
+
+      <div class="breadth-metrics-row">
+        <!-- Advances -->
+        <div class="stat-item advance-stat">
+          <mat-icon class="stat-icon">arrow_upward</mat-icon>
+          <span class="stat-label">Advances:</span>
+          <span class="stat-val">{{ mb.advances }}</span>
+          <span class="stat-pct">({{ mb.advancePercent }}%)</span>
+        </div>
+
+        <!-- Declines -->
+        <div class="stat-item decline-stat">
+          <mat-icon class="stat-icon">arrow_downward</mat-icon>
+          <span class="stat-label">Declines:</span>
+          <span class="stat-val">{{ mb.declines }}</span>
+          <span class="stat-pct">({{ mb.declinePercent }}%)</span>
+        </div>
+
+        <!-- Unchanged -->
+        @if (mb.unchanged > 0) {
+          <div class="stat-item unchanged-stat">
+            <span class="stat-label">Unchanged:</span>
+            <span class="stat-val">{{ mb.unchanged }}</span>
+          </div>
+        }
+
+        <!-- Mini Breadth Progress Track -->
+        <div class="breadth-track-wrap" matTooltip="Market Breadth: Advances (Green) vs Declines (Red)">
+          <div class="seg-advance" [style.width.%]="mb.advancePercent"></div>
+          <div class="seg-decline" [style.width.%]="mb.declinePercent"></div>
+        </div>
+
+        <!-- VWAP Momentum Summary -->
+        <div class="vwap-summary-bias" [class]="vwapSentiment().class">
+          <span class="bias-label">Bias:</span>
+          <span class="bias-text">{{ vwapSentiment().label }}</span>
+          <span class="bias-counts">(Calls > VWAP: {{ callsAboveVWAP() }}/11 | Puts > VWAP: {{ putsAboveVWAP() }}/11)</span>
+        </div>
+      </div>
+    </section>
+  }
+
+  <!-- Error Alert -->
+  @if (errorMessage()) {
+    <div class="error-banner" role="alert">
+      <mat-icon>error_outline</mat-icon>
+      <div class="error-text">
+        <strong>Notice:</strong> {{ errorMessage() }}
+      </div>
+      <button mat-button class="retry-btn" (click)="onManualRefresh()">Retry</button>
+    </div>
+  }
+
+  <!-- 3. Primary Option Chain VWAP Table (ATM ±5 Strikes) -->
+  <div class="table-card">
+    <!-- Loading Overlay -->
+    @if (isLoading()) {
+      <div class="loading-overlay">
+        <mat-progress-spinner mode="indeterminate" diameter="42"></mat-progress-spinner>
+        <span>Computing Volume Weighted Average Prices for 22 contracts...</span>
+      </div>
+    }
+
+    <div class="table-responsive">
+      <table class="vwap-table">
+        <thead>
+          <!-- Super Header Row -->
+          <tr class="super-header">
+            <th colspan="3" class="th-super th-call-super">
+              <div class="super-title-wrap">
+                <mat-icon class="side-icon">trending_up</mat-icon>
+                <span>CALL OPTIONS (CE)</span>
+              </div>
+            </th>
+            <th class="th-super th-strike-super">STRIKE</th>
+            <th colspan="3" class="th-super th-put-super">
+              <div class="super-title-wrap">
+                <mat-icon class="side-icon">trending_down</mat-icon>
+                <span>PUT OPTIONS (PE)</span>
+              </div>
+            </th>
+          </tr>
+
+          <!-- Column Header Row -->
+          <tr class="col-header">
+            <!-- CE Side -->
+            <th class="th-col th-diff-call" matTooltip="Points & percentage difference: LTP - VWAP">CE DIFF</th>
+            <th class="th-col th-vwap-call" matTooltip="Session Volume Weighted Average Price for Call">CE VWAP</th>
+            <th class="th-col th-ltp-call" matTooltip="Live Call Option Last Traded Price">CE LTP</th>
+
+            <!-- Center Strike -->
+            <th class="th-col th-strike" matTooltip="Strike Price (Centered on ATM)">STRIKE PRICE</th>
+
+            <!-- PE Side -->
+            <th class="th-col th-ltp-put" matTooltip="Live Put Option Last Traded Price">PE LTP</th>
+            <th class="th-col th-vwap-put" matTooltip="Session Volume Weighted Average Price for Put">PE VWAP</th>
+            <th class="th-col th-diff-put" matTooltip="Points & percentage difference: LTP - VWAP">PE DIFF</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          @for (row of rows(); track row.strikePrice) {
+            <tr
+              class="strike-row"
+              [class.atm-row]="row.isATM"
+              [attr.data-strike]="row.strikePrice"
+            >
+              <!-- 1. CE DIFF (Points & %) -->
+              <td class="td-cell td-ce-diff" [class.above-vwap]="row.ce.difference > 0" [class.below-vwap]="row.ce.difference < 0">
+                @if (row.ce.status === 'available') {
+                  <div class="diff-badge" [class.diff-up]="row.ce.difference > 0" [class.diff-down]="row.ce.difference < 0">
+                    <span class="diff-pts">{{ formatDiff(row.ce.difference) }}</span>
+                    <span class="diff-pct">({{ formatDiffPct(row.ce.differencePct) }})</span>
+                  </div>
+                } @else {
+                  <span class="text-muted">—</span>
+                }
+              </td>
+
+              <!-- 2. CE VWAP -->
+              <td class="td-cell td-ce-vwap">
+                @if (row.ce.vwap !== null) {
+                  <span class="val-mono vwap-val">{{ formatPrice(row.ce.vwap) }}</span>
+                } @else {
+                  <span class="no-vol-pill">No Vol</span>
+                }
+              </td>
+
+              <!-- 3. CE LTP -->
+              <td
+                class="td-cell td-ce-ltp"
+                [class.ltp-above]="row.ce.status === 'available' && row.ce.difference > 0"
+                [class.ltp-below]="row.ce.status === 'available' && row.ce.difference < 0"
+              >
+                <div class="ltp-wrap">
+                  <span class="val-mono ltp-bold">{{ formatPrice(row.ce.ltp) }}</span>
+                  @if (row.ce.difference > 0) {
+                    <mat-icon class="ltp-trend-icon up-icon">arrow_drop_up</mat-icon>
+                  } @else if (row.ce.difference < 0) {
+                    <mat-icon class="ltp-trend-icon down-icon">arrow_drop_down</mat-icon>
+                  }
+                </div>
+              </td>
+
+              <!-- 4. CENTER: STRIKE PRICE & ATM BADGE -->
+              <td class="td-cell td-strike-center">
+                <div class="strike-box" [class.atm-strike-box]="row.isATM">
+                  <span class="strike-number">{{ formatPrice(row.strikePrice) }}</span>
+                  @if (row.isATM) {
+                    <span class="atm-badge">ATM</span>
+                  }
+                </div>
+              </td>
+
+              <!-- 5. PE LTP -->
+              <td
+                class="td-cell td-pe-ltp"
+                [class.ltp-above]="row.pe.status === 'available' && row.pe.difference > 0"
+                [class.ltp-below]="row.pe.status === 'available' && row.pe.difference < 0"
+              >
+                <div class="ltp-wrap">
+                  <span class="val-mono ltp-bold">{{ formatPrice(row.pe.ltp) }}</span>
+                  @if (row.pe.difference > 0) {
+                    <mat-icon class="ltp-trend-icon up-icon">arrow_drop_up</mat-icon>
+                  } @else if (row.pe.difference < 0) {
+                    <mat-icon class="ltp-trend-icon down-icon">arrow_drop_down</mat-icon>
+                  }
+                </div>
+              </td>
+
+              <!-- 6. PE VWAP -->
+              <td class="td-cell td-pe-vwap">
+                @if (row.pe.vwap !== null) {
+                  <span class="val-mono vwap-val">{{ formatPrice(row.pe.vwap) }}</span>
+                } @else {
+                  <span class="no-vol-pill">No Vol</span>
+                }
+              </td>
+
+              <!-- 7. PE DIFF (Points & %) -->
+              <td class="td-cell td-pe-diff" [class.above-vwap]="row.pe.difference > 0" [class.below-vwap]="row.pe.difference < 0">
+                @if (row.pe.status === 'available') {
+                  <div class="diff-badge" [class.diff-up]="row.pe.difference > 0" [class.diff-down]="row.pe.difference < 0">
+                    <span class="diff-pts">{{ formatDiff(row.pe.difference) }}</span>
+                    <span class="diff-pct">({{ formatDiffPct(row.pe.differencePct) }})</span>
+                  </div>
+                } @else {
+                  <span class="text-muted">—</span>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Empty State -->
+    @if (!isLoading() && rows().length === 0) {
+      <div class="table-empty">
+        <mat-icon class="empty-icon">search_off</mat-icon>
+        <span class="empty-title">No VWAP Strike Data Available</span>
+        <span class="empty-desc">Check your API connection or select an available trading session.</span>
+      </div>
+    }
+  </div>
+
+  <!-- 4. Footer Information & Formula Legend -->
+  <footer class="vwap-footer">
+    <div class="formula-card">
+      <span class="formula-label">Formula:</span>
+      <code>VWAP = &Sigma;(((High + Low + Close) / 3) &times; &Delta;Volume) / &Sigma;&Delta;Volume</code>
+      <span class="formula-note">Calculated session-wide from 09:15 AM IST (Asia/Kolkata). Values update in real time.</span>
+    </div>
+
+    <div class="legend-items">
+      <div class="legend-item">
+        <span class="legend-swatch above-swatch"></span>
+        <span>LTP &gt; VWAP (Premium Above Average)</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-swatch below-swatch"></span>
+        <span>LTP &lt; VWAP (Discount Below Average)</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-swatch atm-swatch"></span>
+        <span>At-The-Money (ATM) Center Strike</span>
+      </div>
+    </div>
+  </footer>
+</div>

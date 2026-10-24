@@ -92,6 +92,8 @@ export class PCRTrackerComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // UI View Controls
   activeChartTab = signal<'all' | 'pcr-trend' | 'oi-comp' | 'price-comp' | 'oi-change'>('all');
+  chartsVisible = signal<boolean>(true);
+  eduSectionExpanded = signal<boolean>(false);
 
   // Table State Signals
   tableSearchQuery = signal<string>('');
@@ -299,6 +301,18 @@ export class PCRTrackerComponent implements OnInit, AfterViewInit, OnDestroy {
   onTabChange(tab: 'all' | 'pcr-trend' | 'oi-comp' | 'price-comp' | 'oi-change'): void {
     this.activeChartTab.set(tab);
     setTimeout(() => this.renderAllCharts(), 100);
+  }
+
+  toggleCharts(): void {
+    const next = !this.chartsVisible();
+    this.chartsVisible.set(next);
+    if (next) {
+      setTimeout(() => this.renderAllCharts(), 60);
+    }
+  }
+
+  toggleEduSection(): void {
+    this.eduSectionExpanded.update((v) => !v);
   }
 
   /**

@@ -3,6 +3,13 @@ const router = express.Router();
 const controller = require('../controllers/optionChainController');
 
 router.get('/indices', controller.getIndices);
+router.get('/advance-decline', controller.getAdvanceDecline);
+router.get('/market-breadth', controller.getAdvanceDecline);
+
+// GET /api/options/vwap & /api/option-chain/vwap - Option Chain VWAP for ATM ±5 Strikes (CE & PE)
+router.get('/options/vwap', controller.getOptionChainVWAP);
+router.get('/option-chain/vwap', controller.getOptionChainVWAP);
+router.get('/option-chain/:symbol/vwap', controller.getOptionChainVWAP);
 
 // GET /api/option-chain/historical & /api/option-chain/history - Historical Option Chain Replay
 // Query params: ?date=2026-09-10&expiry=2026-09-15&startTime=09:15&endTime=15:30&timeFrame=1&strikeRange=3

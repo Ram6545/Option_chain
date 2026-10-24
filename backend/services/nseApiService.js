@@ -204,6 +204,7 @@ const initializeSession = async (force = false) => {
   }
 
   const sessionUrls = [
+    `${NSE_BASE_URL}/market-data/live-equity-market`,
     `${NSE_BASE_URL}/option-chain`,
     `${NSE_BASE_URL}/get-quotes/derivatives?symbol=NIFTY`,
     NSE_BASE_URL,
@@ -549,6 +550,152 @@ const getContractInfo = async (symbol) => {
   };
 };
 
+/**
+ * Get Market Breadth Contribution Data for Advance-Decline dashboard.
+ * Primary URL: https://www.nseindia.com/api/NextApi/apiClient/indexTrackerApi?functionName=getContributionData&index=NIFTY%2050&noofrecords=0&flag=1
+ */
+const getContributionData = async (index = 'NIFTY 50', forceRefresh = false) => {
+  const normalizedIndex = (index || 'NIFTY 50').trim();
+  const cacheKey = `contrib_${normalizedIndex.toUpperCase()}`;
+  const now = Date.now();
+
+  if (!forceRefresh && cache.has(cacheKey)) {
+    const cached = cache.get(cacheKey);
+    if (now - cached.timestamp < 30000) {
+      return cached.data;
+    }
+  }
+
+  try {
+    await initializeSession();
+    const encodedIndex = encodeURIComponent(normalizedIndex);
+    const targetUrl = `${NSE_BASE_URL}/api/NextApi/apiClient/indexTrackerApi?functionName=getContributionData&index=${encodedIndex}&noofrecords=0&flag=1`;
+
+    let res = await makeHttpsRequest(
+      targetUrl,
+      {
+        Accept: 'application/json, text/plain, */*',
+        Referer: `${NSE_BASE_URL}/market-data/live-equity-market`,
+      },
+      true
+    );
+
+    if (res.statusCode === 401 || res.statusCode === 403) {
+      console.log(`🔄 Session invalid (${res.statusCode}) on contribution API, re-initializing cookies...`);
+      cookieStore.clear();
+      await initializeSession(true);
+      res = await makeHttpsRequest(
+        targetUrl,
+        {
+          Accept: 'application/json, text/plain, */*',
+          Referer: `${NSE_BASE_URL}/market-data/live-equity-market`,
+        },
+        true
+      );
+    }
+
+    if (res.statusCode === 200 && res.body) {
+      const parsed = JSON.parse(res.body);
+      const rawList = parsed.data || [];
+
+      const normalizedStocks = rawList.map((item) => {
+        const ltp = parseFloat(item.lastTradedPrice) || 0;
+        const close = parseFloat(item.closePrice) || 0;
+        const changePer = parseFloat(item.changePer) || 0;
+        const changePoints = parseFloat(item.changePoints) || 0;
+        const priceChange = Math.round((ltp - close) * 100) / 100;
+
+        let category = 'unchanged';
+        if (changePer > 0) {
+          category = 'advance';
+        } else if (changePer < 0) {
+          category = 'decline';
+        } else {
+          category = 'unchanged';
+        }
+
+        return {
+          symbol: item.icSymbol || '',
+          companyName: item.icSecurity || item.icSymbol || '',
+          price: ltp,
+          closePrice: close,
+          change: priceChange,
+          changePercent: changePer,
+          contributionPoints: changePoints,
+          category,
+          isPositive: item.isPositive || (changePer >= 0 ? 'Y' : 'N'),
+          rnPositive: item.rnPositive ?? null,
+          rnNegative: item.rnNegative ?? null,
+        };
+      });
+
+      const advances = normalizedStocks.filter((s) => s.category === 'advance').length;
+      const declines = normalizedStocks.filter((s) => s.category === 'decline').length;
+      const unchanged = normalizedStocks.filter((s) => s.category === 'unchanged').length;
+      const total = normalizedStocks.length;
+
+      let adRatio = 0;
+      if (declines > 0) {
+        adRatio = parseFloat((advances / declines).toFixed(2));
+      } else if (advances > 0) {
+        adRatio = advances;
+      } else {
+        adRatio = 1.0;
+      }
+
+      const advancePercent = total > 0 ? parseFloat(((advances / total) * 100).toFixed(1)) : 0;
+      const declinePercent = total > 0 ? parseFloat(((declines / total) * 100).toFixed(1)) : 0;
+      const unchangedPercent = total > 0 ? parseFloat(((unchanged / total) * 100).toFixed(1)) : 0;
+
+      const payload = {
+        success: true,
+        index: normalizedIndex,
+        timestamp: new Date().toISOString(),
+        summary: {
+          total,
+          advances,
+          declines,
+          unchanged,
+          adRatio,
+          advancePercent,
+          declinePercent,
+          unchangedPercent,
+        },
+        data: normalizedStocks,
+      };
+
+      cache.set(cacheKey, { timestamp: now, data: payload });
+      return payload;
+    }
+
+    // Fallback to cached data if available
+    if (cache.has(cacheKey)) {
+      console.warn(`⚠️ Non-200 from NSE (${res.statusCode}), returning stale cache for ${normalizedIndex}`);
+      return cache.get(cacheKey).data;
+    }
+
+    return {
+      success: false,
+      error: `NSE returned HTTP status ${res.statusCode}`,
+      index: normalizedIndex,
+      data: [],
+      summary: { total: 0, advances: 0, declines: 0, unchanged: 0, adRatio: 0, advancePercent: 0, declinePercent: 0, unchangedPercent: 0 },
+    };
+  } catch (err) {
+    console.error(`⚠️ Error fetching contribution data for ${normalizedIndex}:`, err.message);
+    if (cache.has(cacheKey)) {
+      return cache.get(cacheKey).data;
+    }
+    return {
+      success: false,
+      error: err.message,
+      index: normalizedIndex,
+      data: [],
+      summary: { total: 0, advances: 0, declines: 0, unchanged: 0, adRatio: 0, advancePercent: 0, declinePercent: 0, unchangedPercent: 0 },
+    };
+  }
+};
+
 module.exports = {
   getOptionChainData,
   getExpiryDates,
@@ -559,5 +706,7 @@ module.exports = {
   getATMStrikePrices,
   getUnderlyingPrice,
   getContractInfo,
+  getContributionData,
   initializeSession,
 };
+

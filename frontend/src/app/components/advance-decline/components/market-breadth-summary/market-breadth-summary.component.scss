@@ -1,0 +1,191 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+.summary-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  margin-bottom: 8px;
+}
+
+/* Single-row Horizontal Metrics */
+.metrics-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.metric-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  flex: 1 1 auto;
+  min-width: 130px;
+  height: 32px;
+  box-sizing: border-box;
+  justify-content: space-between;
+
+  &.advance-pill {
+    background-color: #ecfdf5;
+    border-color: #a7f3d0;
+    .pill-icon { color: #059669; }
+    .pill-count { color: #065f46; }
+    .pill-pct { color: #047857; }
+  }
+
+  &.decline-pill {
+    background-color: #fef2f2;
+    border-color: #fecaca;
+    .pill-icon { color: #dc2626; }
+    .pill-count { color: #991b1b; }
+    .pill-pct { color: #b91c1c; }
+  }
+
+  &.unchanged-pill {
+    background-color: #f9fafb;
+    border-color: #e5e7eb;
+    .pill-icon { color: #6b7280; }
+    .pill-count { color: #374151; }
+    .pill-pct { color: #6b7280; }
+  }
+
+  &.total-pill {
+    background-color: #f8fafc;
+    border-color: #e2e8f0;
+    .pill-icon { color: #0b5cab; }
+    .pill-count { color: #0f172a; }
+  }
+
+  &.ratio-pill {
+    background-color: #f8fafc;
+    border-color: #cbd5e1;
+
+    &.bullish {
+      background-color: #ecfdf5;
+      border-color: #6ee7b7;
+      .pill-count { color: #047857; }
+      .pill-icon { color: #059669; }
+    }
+
+    &.bearish {
+      background-color: #fef2f2;
+      border-color: #fca5a5;
+      .pill-count { color: #b91c1c; }
+      .pill-icon { color: #dc2626; }
+    }
+
+    &.neutral {
+      background-color: #f8fafc;
+      border-color: #e2e8f0;
+      .pill-count { color: #334155; }
+      .pill-icon { color: #64748b; }
+    }
+  }
+}
+
+.pill-left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pill-icon {
+  font-size: 15px;
+  width: 15px;
+  height: 15px;
+}
+
+.pill-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+}
+
+.pill-right {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.pill-count {
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.pill-pct {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.pill-tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.sentiment-tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+
+  &.bullish {
+    background: #d1fae5;
+    color: #065f46;
+  }
+  &.bearish {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+  &.neutral {
+    background: #f1f5f9;
+    color: #475569;
+  }
+}
+
+/* Compact Progress Bar */
+.breadth-bar-wrap {
+  width: 100%;
+}
+
+.breadth-bar-track {
+  height: 6px;
+  background: #f1f5f9;
+  border-radius: 9999px;
+  overflow: hidden;
+  display: flex;
+  width: 100%;
+}
+
+.bar-segment {
+  height: 100%;
+  transition: width 0.3s ease;
+
+  &.advance-segment {
+    background: #10b981;
+  }
+
+  &.unchanged-segment {
+    background: #cbd5e1;
+  }
+
+  &.decline-segment {
+    background: #ef4444;
+  }
+}

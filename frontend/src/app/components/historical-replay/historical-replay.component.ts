@@ -36,6 +36,7 @@ import {
   AutoSyncController,
   ReplayMode,
   validateTradingDay,
+  getNearestValidTradingDate,
   formatDisplayDate,
   toISODateString,
   timeToMinutes,
@@ -120,7 +121,7 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
   // Configuration Signals
   symbol = signal<string>('NIFTY');
   readonly todayISODate = toISODateString(new Date());
-  selectedDate = signal<string>(toISODateString(new Date()));
+  selectedDate = signal<string>(getNearestValidTradingDate(new Date(), 'backward'));
   selectedExpiry = signal<string>('');
   activeExpiry = signal<string>('');
   availableExpiries = signal<string[]>([]);
@@ -280,8 +281,6 @@ export class HistoricalReplayComponent implements OnInit, OnDestroy {
     this.loadIndices();
     this.loadActiveExpiryCycle();
     this.loadHistoricalDates();
-    this.loadHistoricalExpiries();
-    this.loadReplayData();
     this.setupAutoRefresh();
 
     // Hook auto-sync minute rollover to trigger automatic refresh whenever real clock advances into a new minute

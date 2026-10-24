@@ -1,0 +1,115 @@
+<div class="advance-decline-page">
+  <!-- Compact Page Header -->
+  <header class="page-header">
+    <div class="header-left">
+      <h1 class="page-title">Advance–Decline Market Breadth</h1>
+      <span class="live-pulse-badge">
+        <span class="pulse-dot"></span>
+        LIVE NSE
+      </span>
+      <span class="header-subtitle">
+        {{ selectedIndex() }} Momentum Tracking
+      </span>
+    </div>
+
+    <div class="header-right">
+      <button
+        type="button"
+        class="vwap-toggle-btn"
+        [class.active]="showVwap()"
+        (click)="toggleVwap()"
+        matTooltip="Toggle Option Chain VWAP (ATM ±5 Strikes) table"
+      >
+        <mat-icon>{{ showVwap() ? 'visibility_off' : 'candlestick_chart' }}</mat-icon>
+        <span>{{ showVwap() ? 'Hide Option VWAP' : 'Show Option VWAP (ATM ±5)' }}</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Embedded Option Chain VWAP Table (when toggled) -->
+  @if (showVwap()) {
+    <div class="embedded-vwap-container">
+      <app-option-vwap />
+    </div>
+  }
+
+  <!-- Compact Market Breadth Summary Section -->
+  <app-market-breadth-summary
+    [summary]="summary()"
+    [indexName]="selectedIndex()"
+  />
+
+  <!-- Compact Filters & Controls Toolbar -->
+  <app-stock-filters
+    [searchTerm]="searchTerm()"
+    [selectedCategory]="selectedCategory()"
+    [sortField]="sortField()"
+    [sortDirection]="sortDirection()"
+    [counts]="categoryCounts()"
+    [lastUpdated]="lastUpdated()"
+    [isRefreshing]="isRefreshing()"
+    [selectedIndex]="selectedIndex()"
+    [availableIndices]="availableIndices"
+    [autoRefreshEnabled]="autoRefreshEnabled()"
+    [countdown]="countdown()"
+    [density]="density()"
+    (searchChange)="onSearchChange($event)"
+    (categoryChange)="onCategoryChange($event)"
+    (sortFieldChange)="onSortFieldChange($event)"
+    (sortDirectionToggle)="onSortDirectionToggle()"
+    (refreshClick)="onManualRefresh()"
+    (indexChange)="onIndexChange($event)"
+    (autoRefreshToggle)="onAutoRefreshToggle()"
+    (densityChange)="onDensityChange($event)"
+  />
+
+  <!-- Error Alert State -->
+  @if (errorMessage()) {
+    <div class="error-banner" role="alert">
+      <mat-icon class="error-icon">error_outline</mat-icon>
+      <div class="error-content">
+        <span class="error-title">Data Connection Notice</span>
+        <span class="error-desc">{{ errorMessage() }}</span>
+      </div>
+      <button mat-flat-button class="retry-btn" (click)="onManualRefresh()">
+        <mat-icon>replay</mat-icon>
+        <span>Retry</span>
+      </button>
+    </div>
+  }
+
+  <!-- Loading State -->
+  @if (isLoading()) {
+    <div class="loading-state">
+      <mat-spinner diameter="36" strokeWidth="3"></mat-spinner>
+      <p class="loading-text">Fetching real-time NSE contribution data...</p>
+    </div>
+  } @else {
+    <!-- Empty State -->
+    @if (filteredStocks().length === 0) {
+      <div class="empty-state">
+        <mat-icon class="empty-icon">filter_list_off</mat-icon>
+        <h3 class="empty-title">No stocks match your filter</h3>
+        <p class="empty-desc">
+          Try searching for a different symbol or clear your active category filters.
+        </p>
+        <button mat-stroked-button class="empty-btn" (click)="resetFilters()">
+          Clear Filters
+        </button>
+      </div>
+    } @else {
+      <!-- Dense Stock Cards Responsive Grid (Fits within screen) -->
+      <section
+        class="stock-cards-grid"
+        [class.dense-grid]="density() === 'dense'"
+        [class.standard-grid]="density() === 'standard'"
+        [class.cozy-grid]="density() === 'cozy'"
+        aria-label="Stock Cards Grid"
+      >
+        @for (stock of filteredStocks(); track stock.symbol) {
+          <app-stock-card [stock]="stock" />
+        }
+      </section>
+    }
+  }
+</div>

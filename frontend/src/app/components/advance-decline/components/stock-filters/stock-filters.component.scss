@@ -1,0 +1,356 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+.filters-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 6px 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.left-group {
+  flex: 1 1 auto;
+}
+
+.right-group {
+  flex: 0 0 auto;
+}
+
+/* Compact Search Box */
+.search-box {
+  display: flex;
+  align-items: center;
+  position: relative;
+  width: 180px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0 8px;
+  height: 30px;
+  transition: all 0.15s ease;
+
+  &:focus-within {
+    background: #ffffff;
+    border-color: #0b5cab;
+    box-shadow: 0 0 0 2px rgba(11, 92, 171, 0.1);
+  }
+
+  .search-icon {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    color: #64748b;
+    margin-right: 4px;
+  }
+
+  .search-input {
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 12px;
+    color: #1e293b;
+    width: 100%;
+
+    &::placeholder {
+      color: #94a3b8;
+    }
+  }
+
+  .clear-btn {
+    border: none;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    color: #94a3b8;
+
+    mat-icon {
+      font-size: 14px;
+      width: 14px;
+      height: 14px;
+    }
+
+    &:hover {
+      color: #475569;
+    }
+  }
+}
+
+/* Category Filter Pills */
+.category-pills {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 9px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  user-select: none;
+
+  .pill-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+
+    &.green-dot { background-color: #10b981; }
+    &.red-dot { background-color: #ef4444; }
+    &.gray-dot { background-color: #9ca3af; }
+  }
+
+  .count-badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 0 5px;
+    border-radius: 9999px;
+    background: #e2e8f0;
+    color: #334155;
+    line-height: 16px;
+
+    &.green-badge {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    &.red-badge {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    &.gray-badge {
+      background: #e5e7eb;
+      color: #374151;
+    }
+  }
+
+  &:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+    color: #1e293b;
+  }
+
+  &.active {
+    background: #0f172a;
+    border-color: #0f172a;
+    color: #ffffff;
+
+    .count-badge {
+      background: rgba(255, 255, 255, 0.2);
+      color: #ffffff;
+    }
+
+    &.advance-pill {
+      background: #065f46;
+      border-color: #065f46;
+      color: #ffffff;
+      .count-badge { background: #d1fae5; color: #065f46; }
+    }
+
+    &.decline-pill {
+      background: #991b1b;
+      border-color: #991b1b;
+      color: #ffffff;
+      .count-badge { background: #fee2e2; color: #991b1b; }
+    }
+
+    &.unchanged-pill {
+      background: #374151;
+      border-color: #374151;
+      color: #ffffff;
+      .count-badge { background: #e5e7eb; color: #374151; }
+    }
+  }
+}
+
+/* Compact Index Select */
+.compact-select {
+  height: 30px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f172a;
+  outline: none;
+  cursor: pointer;
+}
+
+/* Sort Group */
+.sort-group {
+  display: flex;
+  align-items: center;
+  background: #f1f5f9;
+  border-radius: 6px;
+  padding: 1px;
+  gap: 1px;
+}
+
+.sort-pill {
+  border: none;
+  background: transparent;
+  padding: 3px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #64748b;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  line-height: 22px;
+
+  &:hover {
+    color: #0f172a;
+  }
+
+  &.active {
+    background: #ffffff;
+    color: #0b5cab;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  }
+}
+
+.dir-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: #ffffff;
+  padding: 2px 5px;
+  color: #0b5cab;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-left: 2px;
+  height: 24px;
+
+  mat-icon {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+  }
+}
+
+/* Density Group */
+.density-group {
+  display: flex;
+  align-items: center;
+  background: #f1f5f9;
+  border-radius: 6px;
+  padding: 1px;
+  gap: 1px;
+}
+
+.density-btn {
+  border: none;
+  background: transparent;
+  padding: 3px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  border-radius: 5px;
+  cursor: pointer;
+  line-height: 22px;
+  transition: all 0.12s ease;
+
+  &:hover {
+    color: #0f172a;
+  }
+
+  &.active {
+    background: #ffffff;
+    color: #0f172a;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  }
+}
+
+/* Auto-refresh indicator */
+.compact-auto-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
+  cursor: pointer;
+
+  mat-icon {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+  }
+
+  &.active {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+    color: #166534;
+  }
+}
+
+/* Refresh Button */
+.compact-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  width: 32px;
+  border-radius: 6px;
+  border: none;
+  background: #0b5cab;
+  color: #ffffff;
+  cursor: pointer;
+
+  mat-icon {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+
+    &.spinning {
+      animation: spin 1s linear infinite;
+    }
+  }
+
+  &:hover:not(:disabled) {
+    background: #094a8a;
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

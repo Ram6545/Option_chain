@@ -1,0 +1,28 @@
+<div
+  class="stock-card"
+  [class.positive]="stock.category === 'advance'"
+  [class.negative]="stock.category === 'decline'"
+  [class.neutral]="stock.category === 'unchanged'"
+  [matTooltip]="getTooltipText()"
+  matTooltipPosition="above"
+  matTooltipClass="stock-card-tooltip"
+  role="article"
+  tabindex="0"
+  [attr.aria-label]="getAriaLabel()"
+>
+  <!-- Row 1: Stock symbol at top-left, optional subtle badge at top-right -->
+  <div class="card-row top-row">
+    <span class="stock-symbol">{{ stock.symbol }}</span>
+    @if (stock.contributionPoints !== undefined && stock.contributionPoints !== null && stock.contributionPoints !== 0) {
+      <span class="contrib-tag" [title]="'Index Contribution Points'">
+        {{ stock.contributionPoints > 0 ? '+' : '' }}{{ stock.contributionPoints }}
+      </span>
+    }
+  </div>
+
+  <!-- Row 2: Price at bottom-left, Percentage change at bottom-right -->
+  <div class="card-row bottom-row">
+    <span class="stock-price">{{ formattedPrice }}</span>
+    <span class="stock-percent">{{ formattedPercent }}</span>
+  </div>
+</div>

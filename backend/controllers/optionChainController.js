@@ -4,6 +4,7 @@ const oiAnalysisService = require('../services/oiAnalysisService');
 const nseApiService = require('../services/nseApiService');
 const historicalReplayService = require('../services/historicalReplayService');
 const expiryCycleService = require('../services/expiryCycleService');
+const vwapService = require('../services/vwapService');
 
 /**
  * Controller layer for Option Chain API.
@@ -976,8 +977,48 @@ const triggerCycleRollover = async (req, res, next) => {
   }
 };
 
+/**
+ * Get Advance-Decline Market Breadth Data
+ * GET /api/advance-decline
+ */
+const getAdvanceDecline = async (req, res, next) => {
+  try {
+    const index = req.query.index || 'NIFTY 50';
+    const forceRefresh = req.query.refresh === 'true' || req.query.force === 'true';
+    const result = await nseApiService.getContributionData(index, forceRefresh);
+    if (!result.success && (!result.data || result.data.length === 0)) {
+      return res.status(502).json(result);
+    }
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get Option Chain VWAP for ATM ±5 Strikes (CE & PE)
+ * GET /api/options/vwap or /api/option-chain/vwap or /api/option-chain/:symbol/vwap
+ */
+const getOptionChainVWAP = async (req, res, next) => {
+  try {
+    const symbol = req.params.symbol || req.query.symbol || 'NIFTY';
+    const { expiry, date } = req.query;
+
+    const result = await vwapService.getOptionChainVWAP(symbol, { expiry, date });
+    res.json(result);
+  } catch (error) {
+    console.error('⚠️ [OptionChainController] getOptionChainVWAP error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to compute Option Chain VWAP',
+    });
+  }
+};
+
 module.exports = {
   getIndices,
+  getAdvanceDecline,
+  getOptionChainVWAP,
   getOptionChain,
   getLiveOptionChain,
   getSnapshots,
@@ -1001,3 +1042,4 @@ module.exports = {
   getContractInfo,
   transformOptionChain,
 };
+

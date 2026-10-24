@@ -1,0 +1,193 @@
+<div class="filters-toolbar">
+  <!-- Left Section: Search Bar & Category Filter Pills -->
+  <div class="toolbar-group left-group">
+    <!-- Search Bar -->
+    <div class="search-box">
+      <mat-icon class="search-icon">search</mat-icon>
+      <input
+        type="text"
+        class="search-input"
+        placeholder="Search symbol..."
+        [value]="searchTerm"
+        (input)="onSearchInput($event)"
+        aria-label="Search stocks"
+      />
+      @if (searchTerm) {
+        <button
+          type="button"
+          class="clear-btn"
+          (click)="clearSearch()"
+          aria-label="Clear search"
+          matTooltip="Clear search"
+        >
+          <mat-icon>close</mat-icon>
+        </button>
+      }
+    </div>
+
+    <!-- Category Filter Tabs/Pills -->
+    <div class="category-pills" role="tablist" aria-label="Stock category filter">
+      <button
+        type="button"
+        class="pill-btn all-pill"
+        [class.active]="selectedCategory === 'all'"
+        (click)="setCategory('all')"
+        role="tab"
+        [attr.aria-selected]="selectedCategory === 'all'"
+      >
+        <span>All</span>
+        <span class="count-badge">{{ counts.all }}</span>
+      </button>
+
+      <button
+        type="button"
+        class="pill-btn advance-pill"
+        [class.active]="selectedCategory === 'advance'"
+        (click)="setCategory('advance')"
+        role="tab"
+        [attr.aria-selected]="selectedCategory === 'advance'"
+      >
+        <span class="pill-dot green-dot"></span>
+        <span>Advances</span>
+        <span class="count-badge green-badge">{{ counts.advance }}</span>
+      </button>
+
+      <button
+        type="button"
+        class="pill-btn decline-pill"
+        [class.active]="selectedCategory === 'decline'"
+        (click)="setCategory('decline')"
+        role="tab"
+        [attr.aria-selected]="selectedCategory === 'decline'"
+      >
+        <span class="pill-dot red-dot"></span>
+        <span>Declines</span>
+        <span class="count-badge red-badge">{{ counts.decline }}</span>
+      </button>
+
+      <button
+        type="button"
+        class="pill-btn unchanged-pill"
+        [class.active]="selectedCategory === 'unchanged'"
+        (click)="setCategory('unchanged')"
+        role="tab"
+        [attr.aria-selected]="selectedCategory === 'unchanged'"
+      >
+        <span class="pill-dot gray-dot"></span>
+        <span>Unchanged</span>
+        <span class="count-badge gray-badge">{{ counts.unchanged }}</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Right Section: Index Selector, Sort Buttons, Density Toggle & Refresh -->
+  <div class="toolbar-group right-group">
+    <!-- Index Selector -->
+    <select
+      class="compact-select"
+      [value]="selectedIndex"
+      (change)="onIndexSelect($any($event.target).value)"
+      aria-label="Select stock index"
+    >
+      @for (idx of availableIndices; track idx.symbol) {
+        <option [value]="idx.symbol">{{ idx.displayName }}</option>
+      }
+    </select>
+
+    <!-- Sort Button Group -->
+    <div class="sort-group">
+      <button
+        type="button"
+        class="sort-pill"
+        [class.active]="sortField === 'changePercent'"
+        (click)="setSortField('changePercent')"
+        matTooltip="Sort by % Change"
+      >
+        % Change
+      </button>
+      <button
+        type="button"
+        class="sort-pill"
+        [class.active]="sortField === 'price'"
+        (click)="setSortField('price')"
+        matTooltip="Sort by Stock Price"
+      >
+        Price
+      </button>
+      <button
+        type="button"
+        class="sort-pill"
+        [class.active]="sortField === 'symbol'"
+        (click)="setSortField('symbol')"
+        matTooltip="Sort by Symbol Name"
+      >
+        Symbol
+      </button>
+
+      <!-- Sort Direction Toggle -->
+      <button
+        type="button"
+        class="dir-toggle-btn"
+        (click)="toggleDirection()"
+        [matTooltip]="sortDirection === 'desc' ? 'High to Low (Desc)' : 'Low to High (Asc)'"
+        aria-label="Toggle sort direction"
+      >
+        <mat-icon>{{ sortDirection === 'desc' ? 'arrow_downward' : 'arrow_upward' }}</mat-icon>
+      </button>
+    </div>
+
+    <!-- Density / Layout Toggle -->
+    <div class="density-group" matTooltip="Grid Column Density">
+      <button
+        type="button"
+        class="density-btn"
+        [class.active]="density === 'dense'"
+        (click)="setDensity('dense')"
+        matTooltip="Dense view (Fit screen, 8-10 columns)"
+      >
+        Dense
+      </button>
+      <button
+        type="button"
+        class="density-btn"
+        [class.active]="density === 'standard'"
+        (click)="setDensity('standard')"
+        matTooltip="Standard view (6 columns)"
+      >
+        Std
+      </button>
+      <button
+        type="button"
+        class="density-btn"
+        [class.active]="density === 'cozy'"
+        (click)="setDensity('cozy')"
+        matTooltip="Cozy view (4 columns)"
+      >
+        4 Col
+      </button>
+    </div>
+
+    <!-- Auto-refresh Ticker -->
+    <button
+      type="button"
+      class="compact-auto-refresh"
+      [class.active]="autoRefreshEnabled"
+      (click)="onToggleAutoRefresh()"
+      [matTooltip]="autoRefreshEnabled ? 'Auto-refresh in ' + countdown + 's (Click to pause)' : 'Auto-refresh paused (Click to start)'"
+    >
+      <mat-icon class="pulse-icon">{{ autoRefreshEnabled ? 'sync' : 'sync_disabled' }}</mat-icon>
+      <span>{{ autoRefreshEnabled ? countdown + 's' : 'Off' }}</span>
+    </button>
+
+    <!-- Refresh Button -->
+    <button
+      type="button"
+      class="compact-refresh-btn"
+      (click)="onRefresh()"
+      [disabled]="isRefreshing"
+      matTooltip="Refresh latest data from NSE"
+    >
+      <mat-icon [class.spinning]="isRefreshing">refresh</mat-icon>
+    </button>
+  </div>
+</div>

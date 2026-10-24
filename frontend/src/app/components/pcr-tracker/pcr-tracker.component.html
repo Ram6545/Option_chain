@@ -1,59 +1,166 @@
 <div class="pcr-tracker-container">
-  <!-- 1. Header & Live Status Strip -->
-  <header class="pcr-header">
-    <div class="header-left">
-      <div class="title-with-badge">
-        <mat-icon class="header-icon">insights</mat-icon>
-        <h2 class="header-title">{{ selectedSymbol() }} PCR Data Tracker</h2>
-        <span class="live-indicator" [class.live-active]="isLiveMode()">
-          <span class="pulse-dot"></span>
-          {{ isLiveMode() ? 'Live Mode' : 'Snapshot Mode' }}
-        </span>
+  <!-- 1. Ultra-Compact Control Toolbar (Small Upper Part) -->
+  <header class="pcr-toolbar">
+    <!-- Left: Symbol, Filters, and Interval Controls -->
+    <div class="toolbar-left">
+      <div class="symbol-badge">
+        <mat-icon class="symbol-icon">insights</mat-icon>
+        <span class="symbol-name">{{ selectedSymbol() }} PCR</span>
       </div>
-      <div class="timestamp-tag" *ngIf="pcrData()?.lastUpdated">
-        <mat-icon class="time-icon">schedule</mat-icon>
-        <span>Updated: {{ pcrData()?.lastUpdated | date:'mediumTime' }}</span>
+
+      <!-- Instrument Select -->
+      <div class="filter-item" matTooltip="Select Market Instrument">
+        <select
+          class="compact-select"
+          [ngModel]="selectedSymbol()"
+          (ngModelChange)="onSymbolChange($event)"
+        >
+          <option *ngFor="let idx of indices()" [value]="idx.symbol">
+            {{ idx.display_name || idx.symbol }}
+          </option>
+        </select>
       </div>
+
+      <!-- Expiry Date Select -->
+      <div class="filter-item" matTooltip="Select Option Expiry">
+        <select
+          class="compact-select"
+          [ngModel]="selectedExpiry()"
+          (ngModelChange)="onExpiryChange($event)"
+        >
+          <option *ngFor="let exp of availableExpiries()" [value]="exp">
+            {{ exp }}
+          </option>
+        </select>
+      </div>
+
+      <!-- Trading Date Select -->
+      <div class="filter-item" matTooltip="Select Trading Session">
+        <select
+          class="compact-select"
+          [ngModel]="selectedDate()"
+          (ngModelChange)="onDateChange($event)"
+        >
+          <option *ngFor="let dt of availableDates()" [value]="dt">
+            {{ dt }}
+          </option>
+        </select>
+      </div>
+
+      <!-- Time Interval Pill Group -->
+      <div class="interval-pill-group" matTooltip="Aggregation Interval">
+        <button
+          type="button"
+          class="int-btn"
+          [class.active]="timeFrame() === 1"
+          (click)="onTimeFrameChange(1)"
+        >
+          1m
+        </button>
+        <button
+          type="button"
+          class="int-btn"
+          [class.active]="timeFrame() === 3"
+          (click)="onTimeFrameChange(3)"
+        >
+          3m
+        </button>
+        <button
+          type="button"
+          class="int-btn"
+          [class.active]="timeFrame() === 5"
+          (click)="onTimeFrameChange(5)"
+        >
+          5m
+        </button>
+        <button
+          type="button"
+          class="int-btn"
+          [class.active]="timeFrame() === 15"
+          (click)="onTimeFrameChange(15)"
+        >
+          15m
+        </button>
+        <button
+          type="button"
+          class="int-btn"
+          [class.active]="timeFrame() === 30"
+          (click)="onTimeFrameChange(30)"
+        >
+          30m
+        </button>
+      </div>
+
+      <!-- Configurable Threshold Menu -->
+      <button mat-button [matMenuTriggerFor]="thresholdMenu" class="compact-btn threshold-btn" matTooltip="Configure Bull/Bear Reference Thresholds">
+        <mat-icon class="btn-ic">tune</mat-icon>
+        <span>Bull: {{ bullishThreshold() }} | Bear: {{ bearishThreshold() }}</span>
+      </button>
+      <mat-menu #thresholdMenu="matMenu" class="custom-dropdown-menu">
+        <button mat-menu-item (click)="setThresholds(1.0, 0.8)">Default (Bull &ge; 1.0, Bear &le; 0.8)</button>
+        <button mat-menu-item (click)="setThresholds(1.2, 0.7)">Strict (Bull &ge; 1.2, Bear &le; 0.7)</button>
+        <button mat-menu-item (click)="setThresholds(1.3, 0.65)">Extreme (Bull &ge; 1.3, Bear &le; 0.65)</button>
+        <button mat-menu-item (click)="setThresholds(0.95, 0.85)">Tight (Bull &ge; 0.95, Bear &le; 0.85)</button>
+      </mat-menu>
     </div>
 
-    <div class="header-actions">
-      <!-- Live Toggle -->
+    <!-- Right: Status, Toggles, and Refresh Actions -->
+    <div class="toolbar-right">
+      <!-- Live / Snapshot Indicator Pill -->
       <button
         type="button"
-        class="btn-action live-toggle-btn"
+        class="live-mode-pill"
+        [class.is-live]="isLiveMode()"
         (click)="toggleLiveMode()"
-        [class.active-toggle]="isLiveMode()"
-        matTooltip="Toggle Live Stream vs Recorded Snapshot"
+        matTooltip="Toggle Live Stream vs Recorded Historical Snapshot"
       >
-        <mat-icon class="btn-icon">rss_feed</mat-icon>
-        <span>{{ isLiveMode() ? 'Live ON' : 'Live OFF' }}</span>
+        <span class="live-dot"></span>
+        <span>{{ isLiveMode() ? 'LIVE' : 'SNAPSHOT' }}</span>
       </button>
 
-      <!-- Refresh Button -->
+      <!-- Timestamp Tag -->
+      <span class="update-time" *ngIf="pcrData()?.lastUpdated" matTooltip="Last backend timestamp">
+        <mat-icon class="clock-ic">schedule</mat-icon>
+        <span>{{ pcrData()?.lastUpdated | date:'mediumTime' }}</span>
+      </span>
+
+      <!-- Charts Visibility Toggle Button -->
       <button
         type="button"
-        class="btn-action refresh-btn"
+        class="compact-btn chart-toggle-btn"
+        [class.active]="chartsVisible()"
+        (click)="toggleCharts()"
+        matTooltip="Show or Hide Chart Visualizations"
+      >
+        <mat-icon class="btn-ic">{{ chartsVisible() ? 'analytics' : 'bar_chart' }}</mat-icon>
+        <span>{{ chartsVisible() ? 'Hide Charts' : 'Show Charts' }}</span>
+      </button>
+
+      <!-- Manual Refresh Button -->
+      <button
+        type="button"
+        class="compact-btn refresh-btn"
         (click)="fetchPCRData()"
         [disabled]="isLoading()"
         matTooltip="Refresh PCR Data"
       >
-        <mat-icon class="btn-icon" [class.spinning]="isLoading()">refresh</mat-icon>
-        <span>Refresh</span>
+        <mat-icon class="btn-ic" [class.spinning]="isLoading()">refresh</mat-icon>
+        <span class="btn-text">Refresh</span>
       </button>
 
-      <!-- Auto Refresh Toggle -->
-      <div class="auto-refresh-group">
+      <!-- Auto Refresh Group -->
+      <div class="auto-refresh-chip">
         <mat-slide-toggle
           [checked]="autoRefreshEnabled()"
           (change)="toggleAutoRefresh()"
           color="primary"
-          class="compact-slide-toggle"
+          class="micro-slide-toggle"
           matTooltip="Auto-refresh periodically"
         >
           Auto ({{ autoRefreshInterval() }}s)
         </mat-slide-toggle>
 
-        <button mat-icon-button [matMenuTriggerFor]="refreshMenu" class="menu-btn" matTooltip="Configure Refresh Interval">
+        <button mat-icon-button [matMenuTriggerFor]="refreshMenu" class="micro-menu-btn" matTooltip="Interval">
           <mat-icon>more_vert</mat-icon>
         </button>
         <mat-menu #refreshMenu="matMenu" class="custom-dropdown-menu">
@@ -66,136 +173,26 @@
     </div>
   </header>
 
-  <!-- 2. Controls & Filters Panel -->
-  <section class="controls-panel">
-    <!-- Instrument Selection -->
-    <div class="ctrl-item">
-      <label class="ctrl-label">INSTRUMENT</label>
-      <select
-        class="ctrl-select"
-        [ngModel]="selectedSymbol()"
-        (ngModelChange)="onSymbolChange($event)"
-      >
-        <option *ngFor="let idx of indices()" [value]="idx.symbol">
-          {{ idx.display_name || idx.symbol }}
-        </option>
-      </select>
-    </div>
-
-    <!-- Expiry Date Selection -->
-    <div class="ctrl-item">
-      <label class="ctrl-label">EXPIRY</label>
-      <select
-        class="ctrl-select"
-        [ngModel]="selectedExpiry()"
-        (ngModelChange)="onExpiryChange($event)"
-      >
-        <option *ngFor="let exp of availableExpiries()" [value]="exp">
-          {{ exp }}
-        </option>
-      </select>
-    </div>
-
-    <!-- Date Range / Trading Session Selection -->
-    <div class="ctrl-item">
-      <label class="ctrl-label">TRADING DATE</label>
-      <select
-        class="ctrl-select"
-        [ngModel]="selectedDate()"
-        (ngModelChange)="onDateChange($event)"
-      >
-        <option *ngFor="let dt of availableDates()" [value]="dt">
-          {{ dt }}
-        </option>
-      </select>
-    </div>
-
-    <!-- Time Interval Filter -->
-    <div class="ctrl-item tf-ctrl-item">
-      <label class="ctrl-label">INTERVAL</label>
-      <div class="tf-btn-group">
-        <button
-          type="button"
-          class="tf-btn"
-          [class.active]="timeFrame() === 1"
-          (click)="onTimeFrameChange(1)"
-        >
-          1m
-        </button>
-        <button
-          type="button"
-          class="tf-btn"
-          [class.active]="timeFrame() === 3"
-          (click)="onTimeFrameChange(3)"
-        >
-          3m
-        </button>
-        <button
-          type="button"
-          class="tf-btn"
-          [class.active]="timeFrame() === 5"
-          (click)="onTimeFrameChange(5)"
-        >
-          5m
-        </button>
-        <button
-          type="button"
-          class="tf-btn"
-          [class.active]="timeFrame() === 15"
-          (click)="onTimeFrameChange(15)"
-        >
-          15m
-        </button>
-        <button
-          type="button"
-          class="tf-btn"
-          [class.active]="timeFrame() === 30"
-          (click)="onTimeFrameChange(30)"
-        >
-          30m
-        </button>
-      </div>
-    </div>
-
-    <!-- Configurable Threshold Menu -->
-    <div class="ctrl-item threshold-ctrl-item">
-      <label class="ctrl-label">THRESHOLDS</label>
-      <button mat-stroked-button [matMenuTriggerFor]="thresholdMenu" class="threshold-btn">
-        <mat-icon class="th-icon">tune</mat-icon>
-        <span>Bull: {{ bullishThreshold() }} | Bear: {{ bearishThreshold() }}</span>
-      </button>
-      <mat-menu #thresholdMenu="matMenu" class="custom-dropdown-menu">
-        <button mat-menu-item (click)="setThresholds(1.0, 0.8)">Default (Bull &ge; 1.0, Bear &le; 0.8)</button>
-        <button mat-menu-item (click)="setThresholds(1.2, 0.7)">Strict (Bull &ge; 1.2, Bear &le; 0.7)</button>
-        <button mat-menu-item (click)="setThresholds(1.3, 0.65)">Extreme (Bull &ge; 1.3, Bear &le; 0.65)</button>
-        <button mat-menu-item (click)="setThresholds(0.95, 0.85)">Tight (Bull &ge; 0.95, Bear &le; 0.85)</button>
-      </mat-menu>
-    </div>
-  </section>
-
-  <!-- 3. Dashboard Summary Cards -->
+  <!-- 2. Ultra-Slim Metric Cards (Small Upper Part) -->
   <section class="summary-cards-grid" *ngIf="summary()">
     <!-- Card 1: Current PCR -->
     <div class="summary-card card-pcr">
-      <div class="card-header">
+      <div class="card-top-row">
         <span class="card-label">CURRENT PCR</span>
         <span class="sentiment-pill" [ngClass]="sentimentBadge().class">
           <mat-icon class="pill-icon">{{ sentimentBadge().icon }}</mat-icon>
           <span>{{ sentimentBadge().label }}</span>
         </span>
       </div>
-      <div class="card-body">
-        <div class="primary-metric">{{ formatPCR(summary()?.currentPCR) }}</div>
-        <div class="metric-subtitle">
-          <span>Atm Strike: </span>
-          <strong>{{ summary()?.atmStrike || 'N/A' }}</strong>
-        </div>
+      <div class="card-bottom-row">
+        <span class="primary-metric">{{ formatPCR(summary()?.currentPCR) }}</span>
+        <span class="metric-subtitle">ATM: <strong>{{ summary()?.atmStrike || 'N/A' }}</strong></span>
       </div>
     </div>
 
     <!-- Card 2: PCR Change -->
     <div class="summary-card card-pcr-change">
-      <div class="card-header">
+      <div class="card-top-row">
         <span class="card-label">PCR CHANGE</span>
         <span
           class="trend-indicator"
@@ -208,21 +205,18 @@
           <span>{{ (summary()?.pcrChange || 0) > 0 ? '+' : '' }}{{ summary()?.pcrChange?.toFixed(4) }}</span>
         </span>
       </div>
-      <div class="card-body">
-        <div class="primary-metric" [class.text-green]="(summary()?.pcrChange || 0) > 0" [class.text-red]="(summary()?.pcrChange || 0) < 0">
+      <div class="card-bottom-row">
+        <span class="primary-metric" [class.text-green]="(summary()?.pcrChange || 0) > 0" [class.text-red]="(summary()?.pcrChange || 0) < 0">
           {{ (summary()?.pcrChangePercent || 0) > 0 ? '+' : '' }}{{ summary()?.pcrChangePercent }}%
-        </div>
-        <div class="metric-subtitle">
-          <span>Prev PCR: </span>
-          <strong>{{ formatPCR(summary()?.previousPCR) }}</strong>
-        </div>
+        </span>
+        <span class="metric-subtitle">Prev: <strong>{{ formatPCR(summary()?.previousPCR) }}</strong></span>
       </div>
     </div>
 
     <!-- Card 3: Total Put OI -->
     <div class="summary-card card-put-oi">
-      <div class="card-header">
-        <span class="card-label">TOTAL PUT OI (BULLISH FLOOR)</span>
+      <div class="card-top-row">
+        <span class="card-label">TOTAL PUT OI</span>
         <span
           class="badge-pill"
           [class.positive]="(summary()?.totalPutOIChange || 0) > 0"
@@ -231,19 +225,16 @@
           {{ (summary()?.totalPutOIChange || 0) > 0 ? '+' : '' }}{{ formatOI(summary()?.totalPutOIChange) }}
         </span>
       </div>
-      <div class="card-body">
-        <div class="primary-metric text-green">{{ formatOI(summary()?.totalPutOI) }}</div>
-        <div class="metric-subtitle">
-          <span>Day OI Change: </span>
-          <strong>{{ (summary()?.totalPutOIChange || 0) > 0 ? '+' : '' }}{{ formatOI(summary()?.totalPutOIChange) }}</strong>
-        </div>
+      <div class="card-bottom-row">
+        <span class="primary-metric text-green">{{ formatOI(summary()?.totalPutOI) }}</span>
+        <span class="metric-subtitle">Floor Support</span>
       </div>
     </div>
 
     <!-- Card 4: Total Call OI -->
     <div class="summary-card card-call-oi">
-      <div class="card-header">
-        <span class="card-label">TOTAL CALL OI (RESISTANCE CEILING)</span>
+      <div class="card-top-row">
+        <span class="card-label">TOTAL CALL OI</span>
         <span
           class="badge-pill"
           [class.negative]="(summary()?.totalCallOIChange || 0) > 0"
@@ -252,19 +243,16 @@
           {{ (summary()?.totalCallOIChange || 0) > 0 ? '+' : '' }}{{ formatOI(summary()?.totalCallOIChange) }}
         </span>
       </div>
-      <div class="card-body">
-        <div class="primary-metric text-red">{{ formatOI(summary()?.totalCallOI) }}</div>
-        <div class="metric-subtitle">
-          <span>Day OI Change: </span>
-          <strong>{{ (summary()?.totalCallOIChange || 0) > 0 ? '+' : '' }}{{ formatOI(summary()?.totalCallOIChange) }}</strong>
-        </div>
+      <div class="card-bottom-row">
+        <span class="primary-metric text-red">{{ formatOI(summary()?.totalCallOI) }}</span>
+        <span class="metric-subtitle">Ceiling Resistance</span>
       </div>
     </div>
 
     <!-- Card 5: Spot Price -->
     <div class="summary-card card-spot">
-      <div class="card-header">
-        <span class="card-label">{{ selectedSymbol() }} SPOT PRICE</span>
+      <div class="card-top-row">
+        <span class="card-label">{{ selectedSymbol() }} SPOT</span>
         <span
           class="trend-indicator"
           [class.positive]="(summary()?.spotChange || 0) > 0"
@@ -276,19 +264,16 @@
           <span>{{ (summary()?.spotChange || 0) > 0 ? '+' : '' }}{{ summary()?.spotChange?.toFixed(2) }} ({{ summary()?.spotChangePercent }}%)</span>
         </span>
       </div>
-      <div class="card-body">
-        <div class="primary-metric text-blue">₹{{ formatPrice(summary()?.spotPrice) }}</div>
-        <div class="metric-subtitle">
-          <span>Session Open: </span>
-          <strong>₹{{ formatPrice(summary()?.previousSpotPrice) }}</strong>
-        </div>
+      <div class="card-bottom-row">
+        <span class="primary-metric text-blue">₹{{ formatPrice(summary()?.spotPrice) }}</span>
+        <span class="metric-subtitle">Open: <strong>₹{{ formatPrice(summary()?.previousSpotPrice) }}</strong></span>
       </div>
     </div>
 
     <!-- Card 6: PCR Trend -->
     <div class="summary-card card-trend">
-      <div class="card-header">
-        <span class="card-label">PCR TREND</span>
+      <div class="card-top-row">
+        <span class="card-label">PCR MOMENTUM</span>
         <span
           class="trend-badge"
           [class.trend-increasing]="summary()?.trend === 'Increasing'"
@@ -298,55 +283,52 @@
           {{ summary()?.trend }}
         </span>
       </div>
-      <div class="card-body">
+      <div class="card-bottom-row">
         <div class="trend-status-group">
           <mat-icon class="status-icon" [class.text-green]="summary()?.trend === 'Increasing'" [class.text-red]="summary()?.trend === 'Decreasing'">
             {{ summary()?.trend === 'Increasing' ? 'trending_up' : summary()?.trend === 'Decreasing' ? 'trending_down' : 'trending_flat' }}
           </mat-icon>
-          <span class="trend-title">{{ summary()?.trend }} Momentum</span>
+          <span class="trend-title">{{ summary()?.trend }}</span>
         </div>
-        <div class="metric-subtitle">
-          <span>Recorded Intervals: </span>
-          <strong>{{ totalIntervals() }}</strong>
-        </div>
+        <span class="metric-subtitle">{{ totalIntervals() }} intervals</span>
       </div>
     </div>
   </section>
 
-  <!-- Inferred Support & Resistance Levels Strip -->
+  <!-- 3. Slim Inferred Support & Resistance Bar (Small Upper Part) -->
   <section class="inferred-levels-strip" *ngIf="supportResistance()">
     <div class="strip-badge-title">
       <mat-icon class="title-icon">policy</mat-icon>
-      <span>INFERRED OI LEVELS (Concentration Analysis):</span>
+      <span>INFERRED LEVELS:</span>
     </div>
 
-    <div class="level-pill support-pill" *ngIf="supportResistance()?.majorSupport">
-      <span class="level-type">Major Support:</span>
+    <div class="level-pill support-pill" *ngIf="supportResistance()?.majorSupport" matTooltip="Highest Put OI Concentration">
+      <span class="level-type">Support:</span>
       <strong class="level-strike">{{ supportResistance()?.majorSupport?.strike }}</strong>
-      <span class="level-oi">({{ formatOI(supportResistance()?.majorSupport?.oi) }} PE OI)</span>
+      <span class="level-oi">({{ formatOI(supportResistance()?.majorSupport?.oi) }} PE)</span>
     </div>
 
-    <div class="level-pill resistance-pill" *ngIf="supportResistance()?.majorResistance">
-      <span class="level-type">Major Resistance:</span>
+    <div class="level-pill resistance-pill" *ngIf="supportResistance()?.majorResistance" matTooltip="Highest Call OI Concentration">
+      <span class="level-type">Resistance:</span>
       <strong class="level-strike">{{ supportResistance()?.majorResistance?.strike }}</strong>
-      <span class="level-oi">({{ formatOI(supportResistance()?.majorResistance?.oi) }} CE OI)</span>
+      <span class="level-oi">({{ formatOI(supportResistance()?.majorResistance?.oi) }} CE)</span>
     </div>
 
-    <div class="level-pill bullish-build-pill" *ngIf="supportResistance()?.maxPutAddition">
-      <span class="level-type">Strongest Put Build:</span>
+    <div class="level-pill bullish-build-pill" *ngIf="supportResistance()?.maxPutAddition" matTooltip="Maximum Put Addition During Session">
+      <span class="level-type">Put Build:</span>
       <strong class="level-strike">{{ supportResistance()?.maxPutAddition?.strike }}</strong>
       <span class="level-oi">(+{{ formatOI(supportResistance()?.maxPutAddition?.changeOI) }})</span>
     </div>
 
-    <div class="level-pill bearish-build-pill" *ngIf="supportResistance()?.maxCallAddition">
-      <span class="level-type">Strongest Call Build:</span>
+    <div class="level-pill bearish-build-pill" *ngIf="supportResistance()?.maxCallAddition" matTooltip="Maximum Call Addition During Session">
+      <span class="level-type">Call Build:</span>
       <strong class="level-strike">{{ supportResistance()?.maxCallAddition?.strike }}</strong>
       <span class="level-oi">(+{{ formatOI(supportResistance()?.maxCallAddition?.changeOI) }})</span>
     </div>
   </section>
 
-  <!-- 4. Interactive Graphs Section -->
-  <section class="charts-section">
+  <!-- 4. LARGE INTERACTIVE GRAPHS SECTION -->
+  <section class="charts-section" *ngIf="chartsVisible()">
     <!-- Chart Tabs -->
     <div class="chart-tab-bar">
       <div class="tab-buttons">
@@ -367,7 +349,7 @@
           (click)="onTabChange('pcr-trend')"
         >
           <mat-icon class="tab-icon">show_chart</mat-icon>
-          <span>A. PCR Trend Chart</span>
+          <span>A. PCR Trend</span>
         </button>
 
         <button
@@ -377,7 +359,7 @@
           (click)="onTabChange('oi-comp')"
         >
           <mat-icon class="tab-icon">stacked_line_chart</mat-icon>
-          <span>B. Put OI vs Call OI</span>
+          <span>B. Put vs Call OI</span>
         </button>
 
         <button
@@ -387,7 +369,7 @@
           (click)="onTabChange('price-comp')"
         >
           <mat-icon class="tab-icon">compare_arrows</mat-icon>
-          <span>C. PCR & Spot Comparison</span>
+          <span>C. PCR vs Spot Price</span>
         </button>
 
         <button
@@ -397,20 +379,18 @@
           (click)="onTabChange('oi-change')"
         >
           <mat-icon class="tab-icon">bar_chart</mat-icon>
-          <span>D. OI Change & Concentration</span>
+          <span>D. Strike OI Concentration</span>
         </button>
       </div>
     </div>
 
-    <!-- Charts Container Grid -->
+    <!-- Charts Container Grid (Large Height) -->
     <div class="charts-grid" [ngClass]="'view-' + activeChartTab()">
       <!-- Chart A: PCR Trend -->
       <div class="chart-card card-chart-a" *ngIf="activeChartTab() === 'all' || activeChartTab() === 'pcr-trend'">
         <div class="chart-header">
-          <div class="chart-title-group">
-            <h3 class="chart-title">A. PCR Intraday Trend</h3>
-            <span class="chart-subtitle">Put-Call Ratio over time with configurable Bullish/Bearish reference thresholds</span>
-          </div>
+          <h4 class="chart-title">A. PCR Intraday Trend</h4>
+          <span class="chart-subtitle">Put-Call Ratio with Bullish / Bearish Reference Bands</span>
         </div>
         <div class="chart-canvas-container">
           <canvas #pcrTrendCanvas></canvas>
@@ -420,10 +400,8 @@
       <!-- Chart B: Put OI vs Call OI -->
       <div class="chart-card card-chart-b" *ngIf="activeChartTab() === 'all' || activeChartTab() === 'oi-comp'">
         <div class="chart-header">
-          <div class="chart-title-group">
-            <h3 class="chart-title">B. Put OI vs Call OI Comparison</h3>
-            <span class="chart-subtitle">Aggregate Put OI (support floor) vs Call OI (overhead resistance) evolution</span>
-          </div>
+          <h4 class="chart-title">B. Put OI vs Call OI Comparison</h4>
+          <span class="chart-subtitle">Aggregate Put OI (Floor) vs Call OI (Resistance) Evolution</span>
         </div>
         <div class="chart-canvas-container">
           <canvas #oiCompCanvas></canvas>
@@ -433,10 +411,8 @@
       <!-- Chart C: PCR & Spot Comparison -->
       <div class="chart-card card-chart-c" *ngIf="activeChartTab() === 'all' || activeChartTab() === 'price-comp'">
         <div class="chart-header">
-          <div class="chart-title-group">
-            <h3 class="chart-title">C. PCR vs {{ selectedSymbol() }} Spot Price</h3>
-            <span class="chart-subtitle">Dual-axis correlation: Left Axis = PCR Ratio | Right Axis = Index Spot Price</span>
-          </div>
+          <h4 class="chart-title">C. PCR vs {{ selectedSymbol() }} Spot Price</h4>
+          <span class="chart-subtitle">Dual-axis correlation: Left Axis = PCR Ratio | Right Axis = Spot Price</span>
         </div>
         <div class="chart-canvas-container">
           <canvas #priceCompCanvas></canvas>
@@ -446,10 +422,8 @@
       <!-- Chart D: OI Change & Strike Concentration -->
       <div class="chart-card card-chart-d" *ngIf="activeChartTab() === 'all' || activeChartTab() === 'oi-change'">
         <div class="chart-header">
-          <div class="chart-title-group">
-            <h3 class="chart-title">D. Strike-wise OI Change Concentration</h3>
-            <span class="chart-subtitle">Positions added/shed around ATM strike (Inferred Support & Resistance zones)</span>
-          </div>
+          <h4 class="chart-title">D. Strike-wise OI Change Concentration</h4>
+          <span class="chart-subtitle">Positions added/shed around ATM strike (Support & Resistance)</span>
         </div>
         <div class="chart-canvas-container">
           <canvas #oiChangeCanvas></canvas>
@@ -458,7 +432,7 @@
     </div>
   </section>
 
-  <!-- 5. Historical PCR Data Table -->
+  <!-- 5. Historical PCR Data Table Section -->
   <section class="table-section">
     <div class="table-toolbar">
       <div class="toolbar-left">
@@ -473,7 +447,7 @@
           <input
             type="text"
             class="search-input"
-            placeholder="Search time, strike, trend..."
+            placeholder="Search time, strike..."
             [ngModel]="tableSearchQuery()"
             (ngModelChange)="tableSearchQuery.set($event)"
           />
@@ -497,7 +471,7 @@
 
     <!-- Loading State -->
     <div class="table-loading-overlay" *ngIf="isLoading()">
-      <mat-spinner diameter="36"></mat-spinner>
+      <mat-spinner diameter="30"></mat-spinner>
       <span>Loading historical PCR intervals...</span>
     </div>
 
@@ -599,7 +573,7 @@
       </div>
       <div class="pagination-buttons">
         <button mat-button class="page-btn" [disabled]="tablePage() <= 1" (click)="goToPage(tablePage() - 1)">
-          <mat-icon>chevron_left</mat-icon> Previous
+          <mat-icon>chevron_left</mat-icon> Prev
         </button>
         <button mat-button class="page-btn" [disabled]="tablePage() >= totalPages()" (click)="goToPage(tablePage() + 1)">
           Next <mat-icon>chevron_right</mat-icon>
@@ -608,54 +582,62 @@
     </div>
   </section>
 
-  <!-- 6. Educational Trading Interpretation & Risk Disclaimer -->
+  <!-- 6. Educational Interpretation & Risk Disclaimer (Collapsible Drawer) -->
   <section class="interpretation-section">
     <div class="interpretation-card">
-      <div class="card-title-strip">
-        <mat-icon class="edu-icon">school</mat-icon>
-        <h3>Options Put-Call Ratio (PCR) Educational Interpretation & Context</h3>
-      </div>
-
-      <div class="edu-grid">
-        <div class="edu-item formula-box">
-          <h4>Standard Formula</h4>
-          <code class="formula-code">PCR = Total Put Open Interest / Total Call Open Interest</code>
-          <p class="safe-note">
-            <mat-icon class="check-icon">verified_user</mat-icon>
-            Safe Division Engine: Zero or missing Call OI is handled gracefully (returns N/A), preventing misleading mathematical infinities or corrupted metrics.
-          </p>
+      <div class="card-title-strip" (click)="toggleEduSection()" matTooltip="Click to expand/collapse PCR educational guide and market notice">
+        <div class="strip-left">
+          <mat-icon class="edu-icon">school</mat-icon>
+          <h3>Put-Call Ratio (PCR) Educational Interpretation & Context</h3>
         </div>
-
-        <div class="edu-item">
-          <h4>Rising PCR Dynamic</h4>
-          <p>
-            When PCR increases, put open interest is accumulating faster than call open interest.
-            In derivatives markets, this often indicates aggressive put writing by institutional participants, establishing a supportive floor under the index.
-          </p>
-        </div>
-
-        <div class="edu-item">
-          <h4>Falling PCR Dynamic</h4>
-          <p>
-            When PCR decreases, call open interest is building relative to put open interest.
-            This indicates call writing and hedging against downward movement, signaling potential overhead resistance and selling pressure.
-          </p>
-        </div>
-
-        <div class="edu-item">
-          <h4>Configurable Thresholds</h4>
-          <p>
-            Current configured thresholds: <strong>Bullish &ge; {{ bullishThreshold() }}</strong> | <strong>Bearish &le; {{ bearishThreshold() }}</strong>.
-            Market regimes differ between weekly and monthly expiries; thresholds can be adjusted dynamically in the top control bar.
-          </p>
+        <div class="strip-right">
+          <span class="drawer-hint">{{ eduSectionExpanded() ? 'Collapse' : 'Expand Guide' }}</span>
+          <mat-icon class="chevron-icon">{{ eduSectionExpanded() ? 'expand_less' : 'expand_more' }}</mat-icon>
         </div>
       </div>
 
-      <div class="disclaimer-alert">
-        <mat-icon class="alert-icon">info</mat-icon>
-        <div class="alert-content">
-          <strong>Trading Notice & Risk Context:</strong>
-          Put-Call Ratio alone should never be treated as an isolated or standalone buy/sell signal. PCR must be evaluated alongside underlying price structure, multi-strike open interest shifts, market volatility (India VIX), and overall macroeconomic backdrop. Inferred support and resistance zones are probabilistic concentration levels, not guaranteed outcomes.
+      <div class="edu-content-drawer" *ngIf="eduSectionExpanded()">
+        <div class="edu-grid">
+          <div class="edu-item formula-box">
+            <h4>Standard Formula</h4>
+            <code class="formula-code">PCR = Total Put Open Interest / Total Call Open Interest</code>
+            <p class="safe-note">
+              <mat-icon class="check-icon">verified_user</mat-icon>
+              Safe Division Engine: Zero or missing Call OI is handled gracefully, preventing misleading mathematical infinities or corrupted metrics.
+            </p>
+          </div>
+
+          <div class="edu-item">
+            <h4>Rising PCR Dynamic</h4>
+            <p>
+              When PCR increases, put open interest is accumulating faster than call open interest.
+              In derivatives markets, this often indicates aggressive put writing by institutional participants, establishing a supportive floor under the index.
+            </p>
+          </div>
+
+          <div class="edu-item">
+            <h4>Falling PCR Dynamic</h4>
+            <p>
+              When PCR decreases, call open interest is building relative to put open interest.
+              This indicates call writing and hedging against downward movement, signaling potential overhead resistance and selling pressure.
+            </p>
+          </div>
+
+          <div class="edu-item">
+            <h4>Configurable Thresholds</h4>
+            <p>
+              Current configured thresholds: <strong>Bullish &ge; {{ bullishThreshold() }}</strong> | <strong>Bearish &le; {{ bearishThreshold() }}</strong>.
+              Market regimes differ between weekly and monthly expiries; thresholds can be adjusted dynamically in the top control bar.
+            </p>
+          </div>
+        </div>
+
+        <div class="disclaimer-alert">
+          <mat-icon class="alert-icon">info</mat-icon>
+          <div class="alert-content">
+            <strong>Trading Notice & Risk Context:</strong>
+            Put-Call Ratio alone should never be treated as an isolated or standalone buy/sell signal. PCR must be evaluated alongside underlying price structure, multi-strike open interest shifts, market volatility (India VIX), and overall macroeconomic backdrop. Inferred support and resistance zones are probabilistic concentration levels, not guaranteed outcomes.
+          </div>
         </div>
       </div>
     </div>

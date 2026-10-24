@@ -176,6 +176,18 @@ export function isMarketHoliday(dateInput: Date | string): { isHoliday: boolean;
 }
 
 /**
+ * Quick check if a date is a valid trading day (not a weekend and not an exchange holiday).
+ * Pure check that does NOT call getNearestValidTradingDate, avoiding recursion.
+ */
+export function isTradingDay(dateInput: Date | string): boolean {
+  const iso = toISODateString(dateInput);
+  if (!iso) return false;
+  if (isWeekend(iso)) return false;
+  if (isMarketHoliday(iso).isHoliday) return false;
+  return true;
+}
+
+/**
  * Determine if a date is a valid Indian market trading session.
  */
 export function validateTradingDay(dateInput: Date | string): TradingDayValidation {
@@ -237,9 +249,8 @@ export function getNearestValidTradingDate(
   const step = direction === 'forward' ? 1 : -1;
   const current = parseISODate(iso);
 
-  // If already valid and not forcing a shift, check it
-  const initial = validateTradingDay(current);
-  if (initial.isValid) {
+  // If already a valid trading day, return it immediately
+  if (isTradingDay(iso)) {
     return iso;
   }
 
@@ -247,8 +258,7 @@ export function getNearestValidTradingDate(
   for (let i = 1; i <= 14; i++) {
     current.setDate(current.getDate() + step);
     const checkISO = toISODateString(current);
-    const check = validateTradingDay(checkISO);
-    if (check.isValid) {
+    if (isTradingDay(checkISO)) {
       return checkISO;
     }
   }

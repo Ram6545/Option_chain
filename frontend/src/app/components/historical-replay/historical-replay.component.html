@@ -727,5 +727,14 @@
       <mat-progress-spinner mode="indeterminate" diameter="48"></mat-progress-spinner>
       <span class="overlay-text">Loading Historical Snapshot Data...</span>
     </div>
+
+    <!-- Empty state when no strikes are loaded -->
+    <div class="table-empty-state" *ngIf="!isLoading() && currentStrikes().length === 0 && !errorMessage()">
+      <mat-icon class="empty-icon">history_toggle_off</mat-icon>
+      <div class="empty-title">No Historical Option Chain Data Loaded</div>
+      <div class="empty-desc">
+        Select an available recorded date (e.g. <strong>{{ availableDates()[0] || '2026-10-23' }}</strong>) and click <strong>Load</strong> to begin session replay.
+      </div>
+    </div>
   </mat-card>
 </div>

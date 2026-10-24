@@ -1,0 +1,85 @@
+<section class="summary-card" aria-label="Advance Decline Summary">
+  <!-- Top: Compact Metric Stat Items in a Single Horizontal Row -->
+  <div class="metrics-row">
+    <!-- Advances Item -->
+    <div class="metric-pill advance-pill" role="status" aria-label="Advancing Stocks">
+      <div class="pill-left">
+        <mat-icon class="pill-icon">arrow_upward</mat-icon>
+        <span class="pill-title">Advances</span>
+      </div>
+      <div class="pill-right">
+        <span class="pill-count">{{ summary?.advances ?? 0 }}</span>
+        <span class="pill-pct">({{ summary?.advancePercent ?? 0 }}%)</span>
+      </div>
+    </div>
+
+    <!-- Declines Item -->
+    <div class="metric-pill decline-pill" role="status" aria-label="Declining Stocks">
+      <div class="pill-left">
+        <mat-icon class="pill-icon">arrow_downward</mat-icon>
+        <span class="pill-title">Declines</span>
+      </div>
+      <div class="pill-right">
+        <span class="pill-count">{{ summary?.declines ?? 0 }}</span>
+        <span class="pill-pct">({{ summary?.declinePercent ?? 0 }}%)</span>
+      </div>
+    </div>
+
+    <!-- Unchanged Item -->
+    <div class="metric-pill unchanged-pill" role="status" aria-label="Unchanged Stocks">
+      <div class="pill-left">
+        <mat-icon class="pill-icon">horizontal_rule</mat-icon>
+        <span class="pill-title">Unchanged</span>
+      </div>
+      <div class="pill-right">
+        <span class="pill-count">{{ summary?.unchanged ?? 0 }}</span>
+        <span class="pill-pct">({{ summary?.unchangedPercent ?? 0 }}%)</span>
+      </div>
+    </div>
+
+    <!-- Total Stocks Item -->
+    <div class="metric-pill total-pill" role="status" aria-label="Total Stocks">
+      <div class="pill-left">
+        <mat-icon class="pill-icon">view_comfy</mat-icon>
+        <span class="pill-title">Total</span>
+      </div>
+      <div class="pill-right">
+        <span class="pill-count">{{ summary?.total ?? 0 }}</span>
+        <span class="pill-tag">{{ indexName }}</span>
+      </div>
+    </div>
+
+    <!-- A/D Ratio Item -->
+    <div class="metric-pill ratio-pill" [class]="sentimentClass" role="status" aria-label="Advance Decline Ratio">
+      <div class="pill-left">
+        <mat-icon class="pill-icon">swap_vert</mat-icon>
+        <span class="pill-title">A/D Ratio</span>
+      </div>
+      <div class="pill-right">
+        <span class="pill-count">{{ formattedRatio }}</span>
+        <span class="sentiment-tag" [class]="sentimentClass">{{ sentimentLabel }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom: Compact Visual Market Breadth Bar -->
+  <div class="breadth-bar-wrap">
+    <div class="breadth-bar-track" [attr.aria-label]="'Market breadth progress bar'">
+      <div
+        class="bar-segment advance-segment"
+        [style.width.%]="summary?.advancePercent ?? 0"
+        [matTooltip]="'Advances: ' + (summary?.advances ?? 0) + ' (' + (summary?.advancePercent ?? 0) + '%)'"
+      ></div>
+      <div
+        class="bar-segment unchanged-segment"
+        [style.width.%]="summary?.unchangedPercent ?? 0"
+        [matTooltip]="'Unchanged: ' + (summary?.unchanged ?? 0) + ' (' + (summary?.unchangedPercent ?? 0) + '%)'"
+      ></div>
+      <div
+        class="bar-segment decline-segment"
+        [style.width.%]="summary?.declinePercent ?? 0"
+        [matTooltip]="'Declines: ' + (summary?.declines ?? 0) + ' (' + (summary?.declinePercent ?? 0) + '%)'"
+      ></div>
+    </div>
+  </div>
+</section>

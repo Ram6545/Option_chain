@@ -8,6 +8,8 @@ const models = require('./models');
 const historicalReplayService = require('./services/historicalReplayService');
 const expiryCycleService = require('./services/expiryCycleService');
 const backgroundCollectorService = require('./services/backgroundCollectorService');
+const nseApiService = require('./services/nseApiService');
+const vwapService = require('./services/vwapService');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -703,6 +705,34 @@ app.get('/api/db-status', async (req, res) => {
       status: 'CONNECTION_ERROR',
       error: err.message,
     });
+  }
+});
+
+// Advance-Decline Market Breadth & Contribution Data
+app.get(['/api/advance-decline', '/api/market-breadth'], async (req, res) => {
+  try {
+    const index = req.query.index || 'NIFTY 50';
+    const forceRefresh = req.query.refresh === 'true' || req.query.force === 'true';
+    const result = await nseApiService.getContributionData(index, forceRefresh);
+    if (!result.success && (!result.data || result.data.length === 0)) {
+      return res.status(502).json(result);
+    }
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Option Chain VWAP for ATM ±5 Strikes (CE & PE contracts)
+app.get(['/api/options/vwap', '/api/options/:symbol/vwap', '/api/option-chain/vwap', '/api/option-chain/:symbol/vwap'], async (req, res) => {
+  const symbol = req.params.symbol || req.query.symbol || 'NIFTY';
+  const { expiry, date } = req.query;
+  try {
+    const result = await vwapService.getOptionChainVWAP(symbol, { expiry, date });
+    res.json(result);
+  } catch (error) {
+    console.error('⚠️ [Server] Error in Option Chain VWAP endpoint:', error.message);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
